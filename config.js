@@ -10,6 +10,9 @@
 // Tant qu'il est vide, l'écran de connexion propose de le saisir une fois
 // (il reste alors dans le navigateur) : pratique pour un essai en local.
 window.TERMIN_CONFIG = {
-  apiToken: '',
+  apiToken: '1c5fe68f4c688f3c9688ba8216cd573e6cec52bf6e9383380f18efd0a6c8bee6',
   environment: 'production',
 };
+
+
+
