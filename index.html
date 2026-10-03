@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Termin</title>
+<meta name="description" content="L'agenda partagé d'un voyage professionnel entre collègues — version web, même agenda que l'app iPhone.">
+<meta name="theme-color" content="#0B2A6F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Termin">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone-192.png">
+<link rel="apple-touch-icon" href="icone-180.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <header id="barre"><h1>Termin</h1><div id="outils"></div></header>
+  <main id="contenu"></main>
+  <nav id="onglets" aria-label="Onglets">
+    <button data-action="onglet" data-onglet="agenda"><span class="ico">📋</span>Agenda</button>
+    <button data-action="onglet" data-onglet="semaine"><span class="ico">🗓️</span>Semaine</button>
+    <button data-action="onglet" data-onglet="voyageurs"><span class="ico">👥</span>Voyageurs</button>
+    <button data-action="onglet" data-onglet="reglages"><span class="ico">⚙️</span>Réglages</button>
+  </nav>
+</div>
+
+<!-- Les boutons Apple sont rendus par CloudKit JS à la configuration : ils
+     doivent exister dès le départ. Ils sont déplacés dans les écrans au besoin. -->
+<section id="ecran-connexion" class="voile" hidden>
+  <div class="dedans">
+    <h2>Termin</h2>
+    <p class="intro">L'agenda partagé du voyage, dans le navigateur : le même agenda que l'app iPhone, pour ceux qui n'ont pas d'iPhone.</p>
+    <div class="panneau">
+      <h3>Se connecter</h3>
+      <p class="sec" style="margin:0 0 6px;font-size:14px">L'agenda vit dans iCloud : il faut un identifiant Apple pour y entrer. Un identifiant gratuit se crée en deux minutes sur <a href="https://account.apple.com/" target="_blank" rel="noopener">account.apple.com</a> — aucun appareil Apple n'est nécessaire.</p>
+      <div class="apple-boutons"><div id="apple-sign-in-button"></div></div>
+      <p id="etat-connexion" class="etat-connexion">Connexion à iCloud…</p>
+    </div>
+    <div class="panneau">
+      <h3>Sur Android</h3>
+      <p class="sec" style="margin:0;font-size:14px">Dans Chrome, menu ⋮ puis « Ajouter à l'écran d'accueil » : Termin s'ouvre ensuite comme une app, en plein écran.</p>
+    </div>
+  </div>
+</section>
+<section id="ecran-conditions" class="voile" hidden><div class="dedans" id="conditions-dedans"></div></section>
+<section id="ecran-identite" class="voile" hidden><div class="dedans" id="identite-dedans"></div></section>
+<div id="porte-deconnexion" hidden><div id="apple-sign-out-button"></div></div>
+<div id="feuilles"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdn.apple-cloudkit.com/ck/2/cloudkit.js"></script>
+<script src="regles.js"></script>
+<script src="magasin.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
