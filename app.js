@@ -886,6 +886,9 @@
     retablirIdentite();
     brancherEvenements();
     rendre();
+    // La coquille de la page reste disponible sans réseau (sw.js) — pas en
+    // local ni en démonstration, pour ne pas servir une version périmée.
+    if ('serviceWorker' in navigator && location.protocol === 'https:' && !DEMO) navigator.serviceWorker.register('sw.js').catch(() => {});
     try {
       if (DEMO) {
         await chargerScript('magasin-local.js'); await chargerScript('demo.js');
@@ -903,7 +906,6 @@
       etat.pret = true; rendre();
       if (etat.connecte) await synchroniser();
     } catch (e) { etat.erreurConnexion = (e && e.message) || String(e); etat.pret = true; rendre(); }
-    if ('serviceWorker' in navigator && location.protocol === 'https:' && !DEMO) navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   window.TerminApp = { etat, synchroniser, rendre, version: VERSION };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
