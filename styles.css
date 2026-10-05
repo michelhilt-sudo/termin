@@ -4,6 +4,7 @@
   --encre: #0B1B3A; --secondaire: #5B6B85; --tertiaire: #8A98B3; --pale: #A9B7CC;
   --accent: #1D4ED8; --cyan: #0369A1; --jade: #0F6E8C; --danger: #C81E1E; --danger-doux: #FDE8E8;
   --marine: #0B2A6F; --royal: #1E5AE8; --accent-doux: #E8F0FB; --toast: #0B1B3A;
+  --vert: #15803D; --orange: #C2410C;
   --ombre: 0 6px 20px rgba(11, 27, 58, .10);
   color-scheme: light;
 }
@@ -12,7 +13,7 @@
     --fond: #0B1730; --surface: #142240; --surface2: #1B2D52; --ligne: #2B3F6B;
     --encre: #EAF0FA; --secondaire: #9FB0CC; --tertiaire: #7E8FB0; --pale: #5B6B85;
     --accent: #7CB3FF; --cyan: #7DD3FC; --jade: #67D6F0; --danger: #FF6B66; --danger-doux: #3A1A1A;
-    --accent-doux: #1B2D52; --toast: #2B3F6B; --ombre: 0 6px 20px rgba(0, 0, 0, .35);
+    --accent-doux: #1B2D52; --toast: #2B3F6B; --ombre: 0 6px 20px rgba(0, 0, 0, .35); --vert: #4ADE80; --orange: #FB923C;
     color-scheme: dark;
   }
 }
@@ -20,7 +21,7 @@
   --fond: #0B1730; --surface: #142240; --surface2: #1B2D52; --ligne: #2B3F6B;
   --encre: #EAF0FA; --secondaire: #9FB0CC; --tertiaire: #7E8FB0; --pale: #5B6B85;
   --accent: #7CB3FF; --cyan: #7DD3FC; --jade: #67D6F0; --danger: #FF6B66; --danger-doux: #3A1A1A;
-  --accent-doux: #1B2D52; --toast: #2B3F6B; --ombre: 0 6px 20px rgba(0, 0, 0, .35);
+  --accent-doux: #1B2D52; --toast: #2B3F6B; --ombre: 0 6px 20px rgba(0, 0, 0, .35); --vert: #4ADE80; --orange: #FB923C;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -195,3 +196,12 @@ select.outil { max-width: 150px; text-overflow: ellipsis; }
 .signalement-motif small { display: block; font-size: 12px; color: var(--secondaire); }
 .participants-param .ligne input[type="text"] { text-align: left; }
 .points li { margin-bottom: 12px; } .points b { display: block; } .points p { margin: 2px 0 0; font-size: 14px; color: var(--secondaire); }
+
+/* ---- ma place dans l'événement : participant (vert), lecteur (orange), ni l'un ni l'autre (rouge) */
+.carte.rel-participant::before { background: var(--vert); } .carte.rel-lecteur::before { background: var(--orange); } .carte.rel-aucun::before { background: var(--danger); }
+.carte.occupe::before, .carte.derivee::before { display: block; }
+.carte.conflit::before { background: var(--danger); }
+.rel { font-size: 11px; font-weight: 600; white-space: nowrap; }
+.rel-participant { color: var(--vert); } .rel-lecteur { color: var(--orange); } .rel-aucun { color: var(--danger); }
+.legende { display: flex; gap: 14px; flex-wrap: wrap; padding: 2px 4px 6px; }
+.bloc.rel-participant { box-shadow: inset 3px 0 0 var(--vert); } .bloc.rel-lecteur { box-shadow: inset 3px 0 0 var(--orange); } .bloc.rel-aucun { box-shadow: inset 3px 0 0 var(--danger); }

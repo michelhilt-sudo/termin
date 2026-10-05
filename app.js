@@ -15,7 +15,7 @@
   const Cles = { cache: PREFIXE + 'cache', identite: PREFIXE + 'identite', conditions: 'termin.conditions.acceptees', masques: PREFIXE + 'masques', apparence: 'termin.apparence', boite: PREFIXE + 'boite', onglet: PREFIXE + 'onglet', jeton: 'termin.jeton' };
   const DELAI_INDEXATION = 600000;
   const DESCRIPTION_PARTAGE = 'Chaque événement est en clair pour ses participants et ses lecteurs ; les autres ne voient que « 🔒 Occupé ».';
-  const VERSION = 'web 1.0 (03/10/2026)';
+  const VERSION = 'web 1.1 (05/10/2026)';
   const SUGGESTIONS_VILLES = ['Luxembourg', 'Paris', 'Hong Kong', 'Shanghai'];
   const MOTIFS = [
     ['confidentialite', 'Atteinte à la confidentialité', 'Un détail de dossier, un montant, un document interne…'],
@@ -117,6 +117,16 @@
   const peutVoir = (ev) => Regles.peutVoir(ev, regard());
   const peutModifier = (ev) => Regles.peutModifier(ev, regard());
   const peutSupprimer = (ev) => Regles.peutSupprimer(ev, regard());
+  /// Ma place dans l'événement : participant (ou auteur), lecteur, ou ni l'un
+  /// ni l'autre — vert, orange, rouge (Michel, 05/10/2026).
+  function relation(ev) {
+    const moi = etat.moi ? etat.moi.nom : null; if (!moi) return 'aucun';
+    if (ev.auteur === moi || Regles.personnesConcernees(ev).includes(moi)) return 'participant';
+    if ((ev.lecteurs || []).includes(moi)) return 'lecteur';
+    return 'aucun';
+  }
+  const LIBELLE_RELATION = { participant: '● participant', lecteur: '● lecteur', aucun: '● ni participant ni lecteur' };
+  const chipRelation = (ev) => { const r = relation(ev); return `<span class="rel rel-${r}">${LIBELLE_RELATION[r]}</span>`; };
 
   // ---------------------------------------------------------------- lecture
   const datesDuVoyage = () => Voyage.dates(etat.voyage);
@@ -410,6 +420,7 @@
     if (DEMO) html += bandeau('Démonstration : des données fictives, rien ne part sur iCloud.', 'jade', '🧪');
     html += bandeauBoite();
     html += bandeau('🕐 ' + h(rappelFuseaux()), 'cyan', '🌏');
+    if (etat.moi) html += `<div class="legende"><span class="rel rel-participant">● participant</span><span class="rel rel-lecteur">● lecteur</span><span class="rel rel-aucun">● ni l'un ni l'autre</span></div>`;
     return html;
   }
   function bandeauBoite() {
@@ -461,28 +472,28 @@
     if (!peutVoir(ev)) return carteOccupe(ev, 'Occupé', null, '🔒');
     const confl = conflits(ev); const attenue = !Regles.filtreCorrespond(etat.filtre, ev);
     const lux = Fuseaux.heureALuxembourg(ev.debut, ev.date, villePour(ev));
-    return `<article class="carte${attenue ? ' attenue' : ''}${confl.length ? ' conflit' : ''}" style="${styleType(ev.type)}" data-action="ouvrir" data-id="${h(ev.id)}">
+    return `<article class="carte rel-${relation(ev)}${attenue ? ' attenue' : ''}${confl.length ? ' conflit' : ''}" style="${styleType(ev.type)}" data-action="ouvrir" data-id="${h(ev.id)}">
       ${colonneHeure(ev.debut, ev.fin, Regles.decalageJour(ev))}<div class="icone">${Regles.emoji(ev)}</div>
-      <div class="corps"><div class="titre-ligne"><span class="titre${ev.titre ? '' : ' sec'}">${h(ev.titre || '(à compléter)')}</span><span class="etiquette">${h(Regles.etiquette(ev))}</span>${peutModifier(ev) ? '' : '<span class="mini">👁 lecture</span>'}</div>
+      <div class="corps"><div class="titre-ligne"><span class="titre${ev.titre ? '' : ' sec'}">${h(ev.titre || '(à compléter)')}</span><span class="etiquette">${h(Regles.etiquette(ev))}</span>${chipRelation(ev)}</div>
       ${sousDetails(ev)}${champsPourMoi(ev)}${lux ? `<div class="mini">🕐 ${h(lux)}</div>` : ''}${ev.notes ? `<div class="notes">${h(ev.notes)}</div>` : ''}${chipsParticipants(ev, false)}${confl.length ? alerteConflit(confl) : ''}${signature(ev)}</div>
       <button type="button" class="plus" data-action="menu" data-id="${h(ev.id)}" aria-label="Plus d'actions">⋯</button></article>`;
   }
   function carteOccupe(ev, libelle, heure, symbole) {
     const p = Regles.personnesPourOccupe(ev, etat.voyage.nomsDansOccupe); const attenue = !Regles.filtreCorrespond(etat.filtre, ev);
     const puces = p.noms.map((n) => `<span class="puce">${h(n)}</span>`).concat(p.externes ? [`<span class="puce externe">+${p.externes} externe</span>`] : []);
-    return `<article class="carte occupe${attenue ? ' attenue' : ''}">${colonneHeure(heure !== null && heure !== undefined ? heure : ev.debut, heure === null || heure === undefined ? ev.fin : '', heure === null || heure === undefined ? Regles.decalageJour(ev) : '')}<div class="icone verrou">${symbole || '🔒'}</div><div class="corps"><div class="titre-ligne"><span class="titre">${h(libelle)}</span><span class="mini">· détail privé</span></div>${puces.length ? `<div class="chips">${puces.join('')}</div>` : ''}</div></article>`;
+    return `<article class="carte occupe rel-aucun${attenue ? ' attenue' : ''}">${colonneHeure(heure !== null && heure !== undefined ? heure : ev.debut, heure === null || heure === undefined ? ev.fin : '', heure === null || heure === undefined ? Regles.decalageJour(ev) : '')}<div class="icone verrou">${symbole || '🔒'}</div><div class="corps"><div class="titre-ligne"><span class="titre">${h(libelle)}</span><span class="mini">· détail privé</span></div>${puces.length ? `<div class="chips">${puces.join('')}</div>` : ''}</div></article>`;
   }
   function carteArrivee(ev) {
     if (!peutVoir(ev)) return carteOccupe(ev, 'Arrivée — occupé', ev.fin, '🛬');
     const attenue = !Regles.filtreCorrespond(etat.filtre, ev);
-    return `<article class="carte derivee${attenue ? ' attenue' : ''}" style="${styleType(ev.type)}" data-action="ouvrir" data-id="${h(ev.id)}">${colonneHeure(ev.fin, '', '')}<div class="icone">${ev.type === 'vol' ? '🛬' : '🚉'}</div>
-      <div class="corps"><div class="titre-ligne"><span class="titre">${h(titreOuType(ev))}</span><span class="etiquette">Arrivée</span></div>${champDe(ev, 'arrLieu') ? `<div class="details">🧭 ${h(champDe(ev, 'arrLieu'))}</div>` : ''}<div class="mini">Parti le ${h(Fmt.dateMini(ev.date))}${ev.debut ? ' à ' + h(ev.debut) : ''}${champDe(ev, 'depLieu') ? ' de ' + h(champDe(ev, 'depLieu')) : ''}</div>${chipsParticipants(ev, true)}</div></article>`;
+    return `<article class="carte derivee rel-${relation(ev)}${attenue ? ' attenue' : ''}" style="${styleType(ev.type)}" data-action="ouvrir" data-id="${h(ev.id)}">${colonneHeure(ev.fin, '', '')}<div class="icone">${ev.type === 'vol' ? '🛬' : '🚉'}</div>
+      <div class="corps"><div class="titre-ligne"><span class="titre">${h(titreOuType(ev))}</span><span class="etiquette">Arrivée</span>${chipRelation(ev)}</div>${champDe(ev, 'arrLieu') ? `<div class="details">🧭 ${h(champDe(ev, 'arrLieu'))}</div>` : ''}<div class="mini">Parti le ${h(Fmt.dateMini(ev.date))}${ev.debut ? ' à ' + h(ev.debut) : ''}${champDe(ev, 'depLieu') ? ' de ' + h(champDe(ev, 'depLieu')) : ''}</div>${chipsParticipants(ev, true)}</div></article>`;
   }
   function carteCheckOut(ev) {
     if (!peutVoir(ev)) return carteOccupe(ev, 'Check-out — occupé', ev.fin, '🧳');
     const attenue = !Regles.filtreCorrespond(etat.filtre, ev);
-    return `<article class="carte derivee${attenue ? ' attenue' : ''}" style="${styleType('hotel')}" data-action="ouvrir" data-id="${h(ev.id)}">${colonneHeure(ev.fin, '', '')}<div class="icone">🧳</div>
-      <div class="corps"><div class="titre-ligne"><span class="titre">${h(titreOuType(ev))}</span><span class="etiquette">Check-out</span></div>${Plan.resumeDuLieu(ev) ? `<div class="details">${h(Plan.resumeDuLieu(ev))}</div>` : ''}<div class="mini">Arrivé le ${h(Fmt.dateMini(ev.date))}</div>${chipsParticipants(ev, true)}</div></article>`;
+    return `<article class="carte derivee rel-${relation(ev)}${attenue ? ' attenue' : ''}" style="${styleType('hotel')}" data-action="ouvrir" data-id="${h(ev.id)}">${colonneHeure(ev.fin, '', '')}<div class="icone">🧳</div>
+      <div class="corps"><div class="titre-ligne"><span class="titre">${h(titreOuType(ev))}</span><span class="etiquette">Check-out</span>${chipRelation(ev)}</div>${Plan.resumeDuLieu(ev) ? `<div class="details">${h(Plan.resumeDuLieu(ev))}</div>` : ''}<div class="mini">Arrivé le ${h(Fmt.dateMini(ev.date))}</div>${chipsParticipants(ev, true)}</div></article>`;
   }
   const MASQUES_DETAILS = ['depLieu', 'arrLieu', 'adresse', 'lienCarte', 'depTz', 'arrTz', 'arrDay'];
   function horairesTrajet(ev) {
@@ -578,7 +589,7 @@
         const visible = peutVoir(seg.evenement); const enConflit = conflits(seg.evenement).length > 0;
         const [l1, l2] = visible ? lignesBloc(seg) : ['🔒', ''];
         const largeur = 100 / Math.max(1, seg.colonnes);
-        return `<div class="bloc ${seg.partie === 'full' ? '' : seg.partie}${visible ? '' : ' occupe'}${enConflit ? ' conflit' : ''}${Regles.filtreCorrespond(etat.filtre, seg.evenement) ? '' : ' attenue'}" style="${visible ? styleType(seg.evenement.type) : ''};top:${(s - b.min) * pxMin}px;height:${Math.max(14, (e - s) * pxMin)}px;left:calc(${seg.colonne * largeur}% + 1px);width:calc(${largeur}% - 2px)"${visible ? ` data-action="ouvrir" data-id="${h(seg.evenement.id)}"` : ''}><b>${h(l1)}</b>${l2 ? `<span>${h(l2)}</span>` : ''}</div>`;
+        return `<div class="bloc rel-${visible ? relation(seg.evenement) : 'aucun'} ${seg.partie === 'full' ? '' : seg.partie}${visible ? '' : ' occupe'}${enConflit ? ' conflit' : ''}${Regles.filtreCorrespond(etat.filtre, seg.evenement) ? '' : ' attenue'}" style="${visible ? styleType(seg.evenement.type) : ''};top:${(s - b.min) * pxMin}px;height:${Math.max(14, (e - s) * pxMin)}px;left:calc(${seg.colonne * largeur}% + 1px);width:calc(${largeur}% - 2px)"${visible ? ` data-action="ouvrir" data-id="${h(seg.evenement.id)}"` : ''}><b>${h(l1)}</b>${l2 ? `<span>${h(l2)}</span>` : ''}</div>`;
       }).join('');
       let maintenant = '';
       if (d === aujourdhui) { const now = new Date(); const m = now.getHours() * 60 + now.getMinutes(); if (m >= b.min && m <= b.max) maintenant = `<div class="maintenant" style="left:0;right:0;top:${(m - b.min) * pxMin - 1}px"></div>`; }
