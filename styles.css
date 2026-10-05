@@ -204,3 +204,7 @@ select.outil { max-width: 150px; text-overflow: ellipsis; }
 .rel-participant { color: var(--vert); } .rel-lecteur { color: var(--orange); } .rel-aucun { color: var(--danger); }
 .legende { display: flex; gap: 14px; flex-wrap: wrap; padding: 2px 4px 6px; }
 .bloc.rel-participant { box-shadow: inset 3px 0 0 var(--vert); } .bloc.rel-lecteur { box-shadow: inset 3px 0 0 var(--orange); } .bloc.rel-aucun { box-shadow: inset 3px 0 0 var(--danger); }
+/* le fond de la carte aussi, en teinte claire (Michel, 05/10/2026) */
+.carte.rel-participant { background: color-mix(in srgb, var(--vert) 11%, var(--surface2)); }
+.carte.rel-lecteur { background: color-mix(in srgb, var(--orange) 12%, var(--surface2)); }
+.carte.rel-aucun, .carte.occupe.rel-aucun { background: color-mix(in srgb, var(--danger) 9%, var(--surface2)); }
