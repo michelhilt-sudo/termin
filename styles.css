@@ -112,7 +112,6 @@ select.outil { max-width: 150px; text-overflow: ellipsis; }
 
 .carte { position: relative; display: flex; gap: 10px; align-items: flex-start; padding: 10px 10px 10px 12px; margin: 8px 0; border-radius: 12px; background: var(--surface2); cursor: pointer; }
 .carte::before { content: ""; position: absolute; left: 3px; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--teinte, var(--accent)); }
-.carte.conflit::before { background: var(--danger); }
 .carte.attenue { opacity: .45; }
 .carte.occupe { background: color-mix(in srgb, var(--surface2) 60%, transparent); border: 1px dashed var(--ligne); cursor: default; }
 .carte.occupe::before { display: none; }
@@ -200,7 +199,7 @@ select.outil { max-width: 150px; text-overflow: ellipsis; }
 /* ---- ma place dans l'événement : participant (vert), lecteur (orange), ni l'un ni l'autre (rouge) */
 .carte.rel-participant::before { background: var(--vert); } .carte.rel-lecteur::before { background: var(--orange); } .carte.rel-aucun::before { background: var(--danger); }
 .carte.occupe::before, .carte.derivee::before { display: block; }
-.carte.conflit::before { background: var(--danger); }
+/* un conflit ne change pas la barre : l'encadré ⚠️ suffit, la barre dit ma place */
 .rel { font-size: 11px; font-weight: 600; white-space: nowrap; }
 .rel-participant { color: var(--vert); } .rel-lecteur { color: var(--orange); } .rel-aucun { color: var(--danger); }
 .legende { display: flex; gap: 14px; flex-wrap: wrap; padding: 2px 4px 6px; }
