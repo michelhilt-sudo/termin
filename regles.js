@@ -338,6 +338,10 @@ const Regles = {
     for (const ev of Regles.checkOuts(date, evenements)) items.push({ genre: 'co', evenement: ev, dateOrigine: ev.date, cleTri: ev.fin || '11:00' });
     return items.map((x, i) => ({ x, i })).sort((a, b) => (a.x.cleTri < b.x.cleTri ? -1 : a.x.cleTri > b.x.cleTri ? 1 : a.i - b.i)).map((y) => Object.assign({ id: `${y.x.genre}:${y.x.evenement.id}` }, y.x));
   },
+  // Verrou d'identité (Michel, 07/10/2026) : un prénom appartient au compte
+  // Apple qui a créé sa fiche de voyageur. Libre si la fiche n'existe pas, si
+  // son créateur est inconnu (vieux cache, démonstration) ou si c'est moi.
+  prenomLibre(fiche, compte) { return !fiche || !fiche.creePar || !compte || fiche.creePar === compte; },
   filtreCorrespond(filtre, ev) { if (!filtre) return true; if (filtre === '__autre') return !!ev.autre; return (ev.participants || []).includes(filtre); },
   statistiques(voyage, evenements, visible, aujourdhui) {
     const visibles = evenements.filter(visible); const ecart = Fmt.ecartJours(aujourdhui, voyage.debut);

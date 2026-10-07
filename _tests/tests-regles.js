@@ -68,4 +68,11 @@ const colle = evt('C', { type: 'rdv', champs: { adresse: 'https://maps.app.goo.g
 egal('lien collé : une action', Plan.actions(colle).map((a) => a.libelle), ['Ouvrir dans Google Maps']);
 egal('… la carte ne recopie pas l\'URL', Plan.resumeDuLieu(colle), '🔗 Plan');
 egal('texte dans le champ du lien : cherché', Plan.actions(evt('T', { champs: { lienCarte: '12 rue des Bains' } })).map((a) => a.id), ['google', 'plans', 'copier']);
+
+// ---- verrou d'identité (07/10/2026) : un prénom appartient au compte créateur de sa fiche
+check('fiche absente : libre', Regles.prenomLibre(null, '_moi'));
+check('créateur inconnu : libre', Regles.prenomLibre({ nom: 'Marc', creePar: null }, '_moi'));
+check('ma fiche : libre', Regles.prenomLibre({ nom: 'Marc', creePar: '_moi' }, '_moi'));
+check("fiche d'un autre : prise", !Regles.prenomLibre({ nom: 'Marc', creePar: '_autre' }, '_moi'));
+check('sans compte (démo) : libre', Regles.prenomLibre({ nom: 'Marc', creePar: '_autre' }, null));
 process.exit(bilan('règles Termin (web)') ? 0 : 1);

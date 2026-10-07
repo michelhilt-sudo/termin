@@ -26,6 +26,8 @@
     async retirerEvenement(id) { const e = this.evenements.find((x) => x.id === id); if (!e) throw new ErreurLocale('introuvable', 'Cet événement a été supprimé entre-temps.'); e.retiree = true; e.version += 1; e.modifieLe = new Date(); }
     async enregistrerJour(j) { this.jours = this.jours.filter((x) => x.date !== j.date).concat([Object.assign({}, j)]); }
     async enregistrerVoyage(v) { this.voyage = T.Voyage.normaliser(Object.assign({}, v)); }
+    async lireMembre(id) { const m = this.membres.find((x) => x.id === id); return m ? Object.assign({}, m) : null; }
+    async retirerMembre(id) { this.membres = this.membres.filter((x) => x.id !== id); }
     async enregistrerMembre(m) { this.membres = this.membres.filter((x) => x.id !== m.id).concat([Object.assign({}, m)]); }
     async signaler(s) { this.signalements.push(Object.assign({}, s)); }
     async chargerSignalements() { return this.signalements.slice().sort((a, b) => b.creeLe - a.creeLe); }

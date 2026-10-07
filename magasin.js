@@ -104,10 +104,19 @@
     }
     async lireMembres() {
       try { return (await this.tous({ recordType: 'Membre', filterBy: [{ fieldName: 'inscritLe', comparator: 'GREATER_THAN', fieldValue: { value: 1, type: 'TIMESTAMP' } }] }))
-        .map((r) => ({ id: texte(r, 'identifiant'), nom: texte(r, 'nom'), role: texte(r, 'role', 'voyageur') === 'organisateur' ? 'organisateur' : 'voyageur', inscritLe: dateDe(r, 'inscritLe') || new Date() }))
-        .filter((m) => m.id && m.nom).sort((a, b) => a.nom.localeCompare(b.nom, 'fr')); }
+        .map((r) => this.membreDepuis(r)).filter((m) => m && m.id && m.nom).sort((a, b) => a.nom.localeCompare(b.nom, 'fr')); }
       catch (e) { if (this.schemaAbsent(e)) return []; throw traduire(e); }
     }
+    /// Le compte Apple créateur vient du serveur (`created.userRecordName`),
+    /// jamais d'un champ de l'app : personne ne peut le falsifier.
+    membreDepuis(r) {
+      if (!r) return null;
+      return { id: texte(r, 'identifiant'), nom: texte(r, 'nom'), role: texte(r, 'role', 'voyageur') === 'organisateur' ? 'organisateur' : 'voyageur',
+        inscritLe: dateDe(r, 'inscritLe') || new Date(), creePar: (r.created && r.created.userRecordName) || null };
+    }
+    /// Une fiche relue à l'instant, pour décider d'un prénom sans dépendre du cache.
+    async lireMembre(id) { return this.membreDepuis(await this.relire(`membre-${cle(id)}`)); }
+    async retirerMembre(id) { verifier(await this.base.deleteRecords([`membre-${cle(id)}`])); }
     evenementDepuis(r) {
       const id = texte(r, 'identifiant'), date = texte(r, 'date'); if (!id || !date) return null;
       const editeur = texte(r, 'editeur');

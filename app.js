@@ -15,7 +15,7 @@
   const Cles = { cache: PREFIXE + 'cache', identite: PREFIXE + 'identite', conditions: 'termin.conditions.acceptees', masques: PREFIXE + 'masques', apparence: 'termin.apparence', boite: PREFIXE + 'boite', onglet: PREFIXE + 'onglet', jeton: 'termin.jeton' };
   const DELAI_INDEXATION = 600000;
   const DESCRIPTION_PARTAGE = 'Chaque événement est en clair pour ses participants et ses lecteurs ; les autres ne voient que « 🔒 Occupé ».';
-  const VERSION = 'web 1.1 (05/10/2026)';
+  const VERSION = 'web 1.2 (07/10/2026)';
   const SUGGESTIONS_VILLES = ['Luxembourg', 'Paris', 'Hong Kong', 'Shanghai'];
   const MOTIFS = [
     ['confidentialite', 'Atteinte à la confidentialité', 'Un détail de dossier, un montant, un document interne…'],
@@ -206,14 +206,40 @@
       local.ecrire(Cles.cache, fusion);
       appliquer(fusion);
       retablirIdentite();
+      controlerIdentite();
     } catch (e) {
       if (!(e && e.code === 'horsLigne')) alerte((e && e.message) || String(e));
     } finally { etat.enCours = false; rendre(); }
   }
 
   // ---------------------------------------------------------------- écritures
+  /// La fiche de voyageur d'un prénom, relue au partage quand c'est possible,
+  /// sinon celle du cache. Renvoie null si aucune fiche n'existe.
+  async function ficheDe(nom) {
+    const id = 'local:' + nom;
+    if (magasin && !DEMO) { try { return await magasin.lireMembre(id); } catch (_) { /* hors ligne : le cache tranche */ } }
+    return etat.membres.find((m) => m.id === id) || null;
+  }
+  const monCompte = () => (etat.connecte && !DEMO ? etat.connecte.identifiant : null);
+  /// Le verrou : un prénom appartient au compte Apple qui a créé sa fiche.
+  async function prenomDisponible(nom) {
+    const fiche = await ficheDe(nom);
+    if (Regles.prenomLibre(fiche, monCompte())) return true;
+    alerte(`Le prénom « ${nom} » est déjà lié à un autre compte Apple. Si c'est bien le vôtre, demandez à l'organisateur de le libérer (onglet Voyageurs).`);
+    return false;
+  }
+  /// Au retour d'une synchronisation : le prénom gardé par ce navigateur
+  /// doit toujours m'appartenir.
+  function controlerIdentite() {
+    if (!etat.moi || !monCompte()) return;
+    const fiche = etat.membres.find((m) => m.id === etat.moi.id);
+    if (Regles.prenomLibre(fiche, monCompte())) return;
+    const nom = etat.moi.nom; local.retirer(Cles.identite); etat.moi = null;
+    alerte(`Le prénom « ${nom} » est lié à un autre compte Apple : choisissez le vôtre.`);
+  }
   async function choisirIdentite(nom) {
     if (!nom || !etat.voyage.participants.includes(nom)) { local.retirer(Cles.identite); etat.moi = null; rendre(); return; }
+    if (!(await prenomDisponible(nom))) { rendre(); return; }
     local.ecrire(Cles.identite, nom);
     const connu = etat.membres.find((x) => x.nom === nom);
     const membre = { id: 'local:' + nom, nom, role: role(nom), inscritLe: connu ? connu.inscritLe : new Date() };
@@ -225,11 +251,6 @@
     }
     toast(`Identité : ${nom} — vos prochains événements seront signés à ce nom`);
     rendre();
-  }
-  async function rejoindre(nom) {
-    const propre = String(nom || '').trim(); if (!propre) return;
-    if (!etat.voyage.participants.includes(propre)) await modifierParticipants(etat.voyage.participants.concat([propre]), true);
-    await choisirIdentite(propre);
   }
   /// Enregistre un événement, neuf ou modifié. Renvoie les conflits qu'il crée.
   async function enregistrer(brouillon) {
@@ -278,8 +299,8 @@
     memoriser(); rendre();
     await ecrire({ genre: 'jour', jour: j }, true);
   }
-  async function modifierParticipants(liste, forcer) {
-    if (!estOrganisateur() && !forcer) { alerte('Seul l\'organisateur modifie la liste des voyageurs.'); return; }
+  async function modifierParticipants(liste) {
+    if (!estOrganisateur()) { alerte('Seul l\'organisateur modifie la liste des voyageurs.'); return; }
     const propre = participantsNettoyes(liste); if (!propre.length) return;
     const copie = Object.assign({}, etat.voyage, { participants: propre, modifieLe: new Date() });
     if (copie.organisateur && !propre.includes(copie.organisateur)) copie.organisateur = null;
@@ -304,6 +325,15 @@
     etat.voyage = copie; etat.jours = Instantane.joursComplets(copie, etat.jours); retablirIdentite(); memoriser(); rendre();
     await ecrire({ genre: 'voyage', voyage: copie }, true);
     return Regles.horsPeriode(copie, etat.evenements);
+  }
+  /// L'organisateur rend un prénom à qui veut le prendre : la fiche est
+  /// supprimée, le prochain compte qui choisit ce prénom en devient le titulaire.
+  async function libererPrenom(nom) {
+    if (!estOrganisateur()) { alerte('Seul l\'organisateur libère un prénom.'); return; }
+    const id = 'local:' + nom;
+    try { await magasin.retirerMembre(id); } catch (e) { if (!(e && e.code === 'introuvable')) { alerte((e && e.message) || String(e)); return; } }
+    etat.membres = etat.membres.filter((m) => m.id !== id); memoriser(); rendre();
+    toast(`Prénom « ${nom} » libéré : le prochain compte qui le choisit le garde.`);
   }
   function masquer(nom) {
     if (!nom || (etat.moi && nom === etat.moi.nom)) return;
@@ -402,8 +432,9 @@
   }
   function rendreIdentite() {
     $('#identite-dedans').innerHTML = `<h2>Qui êtes-vous ?</h2><p class="intro">Votre prénom décide de ce que vous voyez en clair : vos événements, ceux où vous figurez, et ceux que vos collègues vous ont ouverts. Le reste apparaît en « 🔒 Occupé ».</p>
-      <div class="panneau"><h3>Participants du voyage</h3>${etat.voyage.participants.map((n) => `<button type="button" class="choix-identite" data-action="identite" data-nom="${h(n)}"><span class="nom">${h(n)}</span>${n === etat.voyage.organisateur ? '<span class="etiquette neutre">Organisateur</span>' : ''}<span class="chev">›</span></button>`).join('')}</div>
-      <div class="panneau"><button type="button" class="lien-bouton" data-action="identite-autre">Je ne suis pas dans la liste…</button><p class="note">L'organisateur peut aussi compléter la liste dans les paramètres du voyage.</p></div>${rappelRegle()}`;
+      <div class="panneau"><h3>Participants du voyage</h3>${etat.voyage.participants.map((n) => { const pris = !Regles.prenomLibre(etat.membres.find((m) => m.id === 'local:' + n), monCompte()); return `<button type="button" class="choix-identite${pris ? ' pris' : ''}" data-action="identite" data-nom="${h(n)}"><span class="nom">${h(n)}</span>${pris ? '<span class="etiquette discret">🔒 autre compte</span>' : ''}${n === etat.voyage.organisateur ? '<span class="etiquette neutre">Organisateur</span>' : ''}<span class="chev">›</span></button>`; }).join('')}</div>
+      <p class="note" style="margin:0 0 10px">Un prénom appartient au premier compte Apple qui le choisit ; personne d'autre ne peut ensuite le prendre.</p>
+      <div class="panneau"><p class="note" style="margin:0">Votre prénom n'y est pas ? Seul l'organisateur ajoute un voyageur : demandez-le-lui.</p></div>${rappelRegle()}`;
   }
   const rappelRegle = () => `<div class="rappel"><span class="ico">✋</span><div><b>Ce qui n'entre pas ici</b><p>Aucun document interne, aucun nom de dossier. On ne publie que ce qu'on pourrait dire à voix haute sans porter atteinte au devoir de confidentialité lié à notre profession.</p></div></div>`;
   const bandeau = (texte, classe, ico) => `<div class="bandeau ${classe || ''}"><span class="ico">${ico || 'ℹ️'}</span><span>${texte}</span></div>`;
@@ -604,9 +635,11 @@
     const moi = etat.moi ? etat.moi.nom : null;
     let html = bandeau(h(DESCRIPTION_PARTAGE + ' Les lecteurs se choisissent sur chaque événement, par celui qui l\'édite.'), 'jade', '👁');
     html += `<div class="panneau"><h3>Les voyageurs</h3>${etat.voyage.participants.map((n) => {
-      const m = []; if (etat.membres.some((x) => x.nom === n)) m.push("a rejoint l'app"); const k = nombreDEvenements(n); if (k) m.push(Fmt.pluriel(k, 'événement'));
-      return `<div class="personne"><span class="avatar" style="background:${teinteNom(n)}">${h(n.slice(0, 1).toUpperCase())}</span><span class="nom">${h(n)}<small>${h(m.length ? m.join(' · ') : '—')}</small></span>${n === etat.voyage.organisateur ? '<span class="etiquette neutre">Organisateur</span>' : ''}${n === moi ? '<span class="etiquette discret">vous</span>' : ''}</div>`;
-    }).join('')}<p class="note">${estOrganisateur() ? 'La liste se complète dans les paramètres du voyage.' : 'Seul l\'organisateur complète cette liste.'}</p></div>`;
+      const fiche = etat.membres.find((x) => x.id === 'local:' + n);
+      const m = []; if (fiche) m.push(fiche.creePar ? (fiche.creePar === monCompte() ? 'prénom lié à votre compte Apple' : 'prénom lié à un compte Apple') : "a rejoint l'app"); const k = nombreDEvenements(n); if (k) m.push(Fmt.pluriel(k, 'événement'));
+      const liberer = estOrganisateur() && fiche ? `<button type="button" class="lien-bouton" data-action="liberer" data-nom="${h(n)}">Libérer</button>` : '';
+      return `<div class="personne"><span class="avatar" style="background:${teinteNom(n)}">${h(n.slice(0, 1).toUpperCase())}</span><span class="nom">${h(n)}<small>${h(m.length ? m.join(' · ') : '—')}</small></span>${n === etat.voyage.organisateur ? '<span class="etiquette neutre">Organisateur</span>' : ''}${n === moi ? '<span class="etiquette discret">vous</span>' : ''}${liberer}</div>`;
+    }).join('')}<p class="note">${estOrganisateur() ? 'La liste se complète dans les paramètres du voyage. « Libérer » rend un prénom à qui veut le prendre, par exemple quand quelqu\'un change de compte Apple.' : 'Seul l\'organisateur complète cette liste.'} Un prénom appartient au premier compte Apple qui le choisit.</p></div>`;
     if (estOrganisateur()) html += `<button type="button" class="bouton sobre" data-action="parametres">Modifier la liste…</button>`;
     return html;
   }
@@ -614,7 +647,7 @@
   // ---------------------------------------------------------------- réglages
   function vueReglages() {
     const moi = etat.moi ? etat.moi.nom : ''; const b = compteBoite(); const apparence = local.lire(Cles.apparence, 'systeme');
-    let html = `<div class="panneau"><h3>Identité</h3><div class="ligne"><label for="r-identite">Je suis</label><select id="r-identite" data-change="identite">${moi ? '' : '<option value="" selected>— à choisir —</option>'}${etat.voyage.participants.map((n) => `<option value="${h(n)}"${n === moi ? ' selected' : ''}>${h(n)}</option>`).join('')}</select></div><div class="ligne"><span class="lib">Rôle</span><span class="sec">${etat.moi ? (estOrganisateur() ? 'Organisateur' : 'Voyageur') : '—'}</span></div><div class="ligne"><button type="button" class="lien-bouton" data-action="identite-autre">Un autre prénom…</button></div><p class="note">Votre prénom décide de ce que vous voyez en clair. En changer ne supprime rien : vos événements restent signés du prénom sous lequel vous les avez créés.</p></div>`;
+    let html = `<div class="panneau"><h3>Identité</h3><div class="ligne"><label for="r-identite">Je suis</label><select id="r-identite" data-change="identite">${moi ? '' : '<option value="" selected>— à choisir —</option>'}${etat.voyage.participants.map((n) => `<option value="${h(n)}"${n === moi ? ' selected' : ''}>${h(n)}</option>`).join('')}</select></div><div class="ligne"><span class="lib">Rôle</span><span class="sec">${etat.moi ? (estOrganisateur() ? 'Organisateur' : 'Voyageur') : '—'}</span></div><p class="note">Votre prénom décide de ce que vous voyez en clair ; il appartient au premier compte Apple qui le choisit. Seul l'organisateur ajoute un voyageur ou libère un prénom.</p></div>`;
     if (etat.moi) html += `<div class="panneau"><div class="ligne"><label for="r-organisateur">Je suis l'organisateur</label><input type="checkbox" id="r-organisateur" data-change="organisateur"${estOrganisateur() ? ' checked' : ''}></div><p class="note">L'organisateur voit tout en clair, règle le voyage et reçoit les signalements.</p></div>`;
     html += `<div class="panneau"><h3>Apparence</h3><div class="pilules">${[['systeme', '◐ Automatique'], ['clair', '☀️ Jour'], ['sombre', '🌙 Nuit']].map(([v, l]) => `<button type="button" class="pilule${apparence === v ? ' active' : ''}" data-action="apparence" data-valeur="${v}">${l}</button>`).join('')}</div><p class="note">« Automatique » suit le réglage du téléphone. Le choix ne vaut que pour ce navigateur. La couleur de l'app (Réglages ▸ Couleur sur iPhone) n'existe pas encore ici.</p></div>`;
     html += `<div class="panneau"><h3>Aide</h3><div class="ligne"><button type="button" class="lien-bouton" data-action="notice">📖 Mode d'emploi</button></div><div class="ligne"><button type="button" class="lien-bouton" data-action="conditions">✋ Conditions d'utilisation</button></div>${estOrganisateur() ? '<div class="ligne"><button type="button" class="lien-bouton" data-action="signalements">💬 Signalements reçus</button></div>' : ''}</div>`;
@@ -766,7 +799,7 @@
   }
   const POINTS = [
     ['À quoi ça sert', "Termin est l'agenda partagé d'un voyage professionnel. Chacun y met ses vols, hôtels, rendez-vous et repas ; tout le monde voit qui est pris à quel moment, et retrouve les informations pratiques sans se les redemander."],
-    ['Qui êtes-vous', "À la première ouverture, connectez-vous avec votre identifiant Apple, puis choisissez votre prénom dans la liste des voyageurs (ou ajoutez-le). C'est lui qui décide de ce que vous voyez en clair. Vous pouvez en changer dans Réglages ▸ Identité. L'organisateur, lui, voit tout et règle le voyage."],
+    ['Qui êtes-vous', "À la première ouverture, connectez-vous avec votre identifiant Apple, puis choisissez votre prénom dans la liste des voyageurs. Seul l'organisateur y ajoute un prénom. Un prénom appartient au premier compte Apple qui le choisit : personne d'autre ne peut ensuite le prendre ; si vous changez de compte, l'organisateur libère votre prénom. L'organisateur, lui, voit tout et règle le voyage."],
     ["L'agenda et la semaine", "L'onglet Agenda déroule les jours du voyage ; touchez un jour dans la grille du haut pour y aller. L'onglet Semaine donne la vue d'ensemble. Le menu 👁 en haut filtre l'agenda sur une personne. Le bouton ↻ synchronise."],
     ['Ajouter un événement', "Le ＋ en haut à droite, ou « Ajouter un événement » sous un jour. Choisissez le type (vol, transport, hébergement, rendez-vous, repas…), le jour, les heures, les participants. Les champs de la section « Pour moi seul » (ma place, ma chambre, ma note) ne sont visibles que de vous ; le reste est commun."],
     ["L'adresse et le plan", "Dans « Adresse », écrivez l'adresse ou collez un lien Plans / Google Maps (dans Google Maps : bouton Partager, pas « Copier l'adresse »). Les boutons juste en dessous ouvrent la carte ; le bouton ⋯ d'une carte de l'agenda les propose aussi."],
@@ -817,7 +850,6 @@
     'accepter-conditions'() { local.ecrire(Cles.conditions, new Date().toISOString()); rendre(); },
     'enregistrer-jeton'() { const i = $('#jeton-saisie'); const v = i ? i.value.trim() : ''; if (!v) return; local.ecrire(Cles.jeton, v); location.reload(); },
     identite(el) { choisirIdentite(el.dataset.nom); },
-    'identite-autre'() { const nom = prompt('Sous quel prénom ? Le prénom est ajouté aux voyageurs et devient le vôtre dans ce navigateur.', ''); if (nom && nom.trim()) rejoindre(nom); },
     synchroniser() { synchroniser(); },
     aller(el) { const s = $('#jour-' + el.dataset.date); if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
     creer(el) { if (!etat.moi) { alerte('Choisissez d\'abord votre prénom.'); return; } ouvrirFormulaire(evenementVide(etat.moi.nom, el.dataset.date || jourParDefaut()), true); },
@@ -828,6 +860,7 @@
     signaler(el) { const ev = evenement(el.dataset.id); fermerFeuille(); if (ev) ouvrirSignalement(ev); },
     masquer(el) { fermerFeuille(); masquer(el.dataset.nom); },
     demasquer(el) { demasquer(el.dataset.nom); },
+    liberer(el) { const n = el.dataset.nom; if (confirm(`Libérer le prénom « ${n} » ? Le prochain compte Apple qui le choisira le gardera.`)) libererPrenom(n); },
     apparence(el) { local.ecrire(Cles.apparence, el.dataset.valeur); appliquerApparence(); rendre(); },
     notice() { ouvrirNotice(); },
     conditions() { ouvrirConditions(); },
