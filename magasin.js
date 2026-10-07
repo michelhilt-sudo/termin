@@ -55,10 +55,11 @@
     get nom() { return 'iCloud'; }
     async identite() {
       const u = await this.conteneur.setUpAuth();
+      this.utilisateur = u ? u.userRecordName : null;
       return u ? { identifiant: u.userRecordName, connecte: true } : { identifiant: 'anonyme', connecte: false };
     }
     /// Appelé à chaque connexion / déconnexion, autant de fois qu'il y en a.
-    surConnexion(f) { const boucle = () => this.conteneur.whenUserSignsIn().then((u) => { f(u); boucle(); }); boucle(); }
+    surConnexion(f) { const boucle = () => this.conteneur.whenUserSignsIn().then((u) => { this.utilisateur = u ? u.userRecordName : null; f(u); boucle(); }); boucle(); }
     surDeconnexion(f) { const boucle = () => this.conteneur.whenUserSignsOut().then(() => { f(); boucle(); }); boucle(); }
 
     // ---- lecture
@@ -112,7 +113,14 @@
     membreDepuis(r) {
       if (!r) return null;
       return { id: texte(r, 'identifiant'), nom: texte(r, 'nom'), role: texte(r, 'role', 'voyageur') === 'organisateur' ? 'organisateur' : 'voyageur',
-        inscritLe: dateDe(r, 'inscritLe') || new Date(), creePar: (r.created && r.created.userRecordName) || null };
+        inscritLe: dateDe(r, 'inscritLe') || new Date(), creePar: this.createur(r) };
+    }
+    /// CloudKit désigne le créateur par « _defaultOwner » quand c'est l'utilisateur
+    /// courant : on le ramène à son vrai identifiant, sinon on se refuserait soi-même.
+    createur(r) {
+      const c = (r.created && r.created.userRecordName) || null;
+      if (!c) return null;
+      return (c === '_defaultOwner' || c === '__defaultOwner__') ? (this.utilisateur || null) : c;
     }
     /// Une fiche relue à l'instant, pour décider d'un prénom sans dépendre du cache.
     async lireMembre(id) { return this.membreDepuis(await this.relire(`membre-${cle(id)}`)); }

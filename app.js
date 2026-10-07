@@ -15,7 +15,7 @@
   const Cles = { cache: PREFIXE + 'cache', identite: PREFIXE + 'identite', conditions: 'termin.conditions.acceptees', masques: PREFIXE + 'masques', apparence: 'termin.apparence', boite: PREFIXE + 'boite', onglet: PREFIXE + 'onglet', jeton: 'termin.jeton' };
   const DELAI_INDEXATION = 600000;
   const DESCRIPTION_PARTAGE = 'Chaque événement est en clair pour ses participants et ses lecteurs ; les autres ne voient que « 🔒 Occupé ».';
-  const VERSION = 'web 1.2 (07/10/2026)';
+  const VERSION = 'web 1.2.1 (07/10/2026)';
   const SUGGESTIONS_VILLES = ['Luxembourg', 'Paris', 'Hong Kong', 'Shanghai'];
   const MOTIFS = [
     ['confidentialite', 'Atteinte à la confidentialité', 'Un détail de dossier, un montant, un document interne…'],
