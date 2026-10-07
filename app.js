@@ -12,10 +12,13 @@
   const CFG = Object.assign({ apiToken: '', environment: 'production', demo: false }, window.TERMIN_CONFIG || {});
   const DEMO = !!CFG.demo || location.hash === '#demo';
   const PREFIXE = DEMO ? 'termin.demo.' : 'termin.';
-  const Cles = { cache: PREFIXE + 'cache', identite: PREFIXE + 'identite', conditions: 'termin.conditions.acceptees', masques: PREFIXE + 'masques', apparence: 'termin.apparence', boite: PREFIXE + 'boite', onglet: PREFIXE + 'onglet', jeton: 'termin.jeton' };
+  const Cles = { cache: PREFIXE + 'cache', identite: PREFIXE + 'identite', conditions: 'termin.conditions.acceptees', masques: PREFIXE + 'masques', apparence: 'termin.apparence', boite: PREFIXE + 'boite', onglet: PREFIXE + 'onglet', jeton: 'termin.jeton', voyage: PREFIXE + 'voyage' };
+  /// Plusieurs voyages (07/10/2026) : l'origine garde ses clés telles quelles,
+  /// un autre voyage a les siennes, suffixées de son code.
+  const cleVoyage = (base, code) => (code === Voyage.codeDOrigine ? base : base + '.' + code);
   const DELAI_INDEXATION = 600000;
   const DESCRIPTION_PARTAGE = 'Chaque événement est en clair pour ses participants et ses lecteurs ; les autres ne voient que « 🔒 Occupé ».';
-  const VERSION = 'web 1.2.1 (07/10/2026)';
+  const VERSION = 'web 1.3 (07/10/2026)';
   const SUGGESTIONS_VILLES = ['Luxembourg', 'Paris', 'Hong Kong', 'Shanghai'];
   const MOTIFS = [
     ['confidentialite', 'Atteinte à la confidentialité', 'Un détail de dossier, un montant, un document interne…'],
@@ -56,7 +59,8 @@
   // ---------------------------------------------------------------- état
   const etat = { voyage: Voyage.parDefaut(), jours: [], evenements: [], enReserve: [], membres: [], synchroniseLe: null,
     moi: null, connecte: null, erreurConnexion: null, pret: false, filtre: '', onglet: local.lire(Cles.onglet, 'agenda'),
-    enCours: false, ecrituresRecentes: {}, lundiChoisi: null };
+    enCours: false, ecrituresRecentes: {}, lundiChoisi: null,
+    codeVoyage: local.lire(Cles.voyage, Voyage.codeDOrigine), voyages: [], generation: 0 };
   let magasin = null;
   const masques = () => new Set(local.lire(Cles.masques, []));
 
@@ -71,7 +75,8 @@
     etat.synchroniseLe = i.synchroniseLe;
   }
   function instantaneCourant() { return { voyage: etat.voyage, jours: etat.jours, evenements: Instantane.tri(etat.evenements.concat(etat.enReserve)), membres: etat.membres, synchroniseLe: etat.synchroniseLe }; }
-  function memoriser() { local.ecrire(Cles.cache, instantaneCourant()); }
+  function memoriser() { local.ecrire(cleVoyage(Cles.cache, etat.codeVoyage), instantaneCourant()); }
+  function cacheDe(code) { return revivre(local.lire(cleVoyage(Cles.cache, code), null)) || { voyage: Voyage.vide(code), jours: [], evenements: [], membres: etat.membres, synchroniseLe: null }; }
 
   /// `Instantane.fusionne` : le serveur fait foi ; ce que le cache connaît et
   /// que le serveur ne renvoie pas n'est gardé que s'il est tout récent
@@ -97,9 +102,12 @@
   function proteger(f) {
     const now = Date.now();
     for (const k of Object.keys(etat.ecrituresRecentes)) if (now - etat.ecrituresRecentes[k] >= DELAI_INDEXATION) delete etat.ecrituresRecentes[k];
+    const prefixe = etat.codeVoyage + ':';
     for (const k of Object.keys(etat.ecrituresRecentes)) {
-      if (k.startsWith('jour:')) { const date = k.slice(5); const j = etat.jours.find((x) => x.date === date); if (j) f.jours = f.jours.filter((x) => x.date !== date).concat([j]).sort((a, b) => (a.date < b.date ? -1 : 1)); }
-      else if (k.startsWith('retrait:')) { const id = k.slice(8); f.evenements = f.evenements.filter((e) => e.id !== id); }
+      if (!k.startsWith(prefixe)) continue;   // les écritures d'un autre voyage ne le concernent pas
+      const reste = k.slice(prefixe.length);
+      if (reste.startsWith('jour:')) { const date = reste.slice(5); const j = etat.jours.find((x) => x.date === date); if (j) f.jours = f.jours.filter((x) => x.date !== date).concat([j]).sort((a, b) => (a.date < b.date ? -1 : 1)); }
+      else if (reste.startsWith('retrait:')) { const id = reste.slice(8); f.evenements = f.evenements.filter((e) => e.id !== id); }
     }
     return f;
   }
@@ -146,8 +154,8 @@
   const jourParDefaut = () => { const a = Fmt.aujourdhui(); return Voyage.contient(etat.voyage, a) ? a : etat.voyage.debut; };
 
   // ---------------------------------------------------------------- boîte d'envoi
-  const boite = () => local.lire(Cles.boite, []);
-  const ecrireBoite = (l) => local.ecrire(Cles.boite, l);
+  const boite = () => local.lire(cleVoyage(Cles.boite, etat.codeVoyage), []);
+  const ecrireBoite = (l) => local.ecrire(cleVoyage(Cles.boite, etat.codeVoyage), l);
   function cleDEcriture(e) {
     switch (e.genre) {
       case 'evenement': return 'evenement:' + e.evenement.id;
@@ -182,13 +190,15 @@
   }
   async function viderLaBoite() {
     let l = boite(); if (!l.some((x) => !x.bloquee)) return;
+    const gen = etat.generation, code = etat.codeVoyage;
     let envoyees = 0;
     for (const entree of l.slice()) {
       if (entree.bloquee) continue;
+      if (gen !== etat.generation) return;   // changé de voyage : on s'arrête, la boîte reste
       try { await rejouer(entree.ecriture); l = l.filter((x) => x.id !== entree.id); envoyees++; }
       catch (e) { if (e && e.code === 'horsLigne') break; entree.essais = (entree.essais || 0) + 1; if (entree.essais >= 3) entree.bloquee = true; }
     }
-    ecrireBoite(l);
+    local.ecrire(cleVoyage(Cles.boite, code), l);
     if (envoyees) toast(`Envoyé : ${Fmt.pluriel(envoyees, 'modification')}`);
     const bloques = l.filter((x) => x.bloquee).length;
     if (bloques) alerte(`${Fmt.pluriel(bloques, 'modification')} n'ont pas pu être envoyées — voir Réglages ▸ Données.`);
@@ -198,18 +208,58 @@
   async function synchroniser() {
     if (!magasin || etat.enCours || !etat.connecte) return;
     etat.enCours = true; rendreOutils();
+    const gen = etat.generation, code = etat.codeVoyage;
     try {
+      await magasin.choisirVoyage(code);
       await viderLaBoite();
+      if (gen !== etat.generation) return;
       const frais = await magasin.chargerInstantane();
+      // Changé de voyage pendant la lecture : ce qui arrive est à l'autre.
+      if (gen !== etat.generation) return;
       frais.synchroniseLe = new Date();
       const fusion = proteger(fusionne(instantaneCourant(), frais));
-      local.ecrire(Cles.cache, fusion);
+      local.ecrire(cleVoyage(Cles.cache, code), fusion);
       appliquer(fusion);
       retablirIdentite();
       controlerIdentite();
+      try { const liste = await magasin.listerVoyages(); if (gen === etat.generation) etat.voyages = liste; } catch (_) {}
     } catch (e) {
       if (!(e && e.code === 'horsLigne')) alerte((e && e.message) || String(e));
-    } finally { etat.enCours = false; rendre(); }
+    } finally { if (gen === etat.generation) etat.enCours = false; rendre(); }
+  }
+
+  // ---------------------------------------------------------------- plusieurs voyages (07/10/2026)
+  /// Les voyages que je peux ouvrir : ceux où mon prénom figure, et celui qui est ouvert.
+  function voyagesVisibles() {
+    const moi = etat.moi ? etat.moi.nom : null;
+    const liste = etat.voyages.filter((v) => v.code === etat.codeVoyage || (moi && v.participants.includes(moi)));
+    if (!liste.some((v) => v.code === etat.codeVoyage)) liste.push(etat.voyage);
+    return liste.sort((a, b) => (a.debut < b.debut ? 1 : -1));
+  }
+  const prenomsConnus = () => participantsNettoyes(etat.voyage.participants.concat(...etat.voyages.map((v) => v.participants), etat.membres.map((m) => m.nom))).sort((a, b) => a.localeCompare(b, 'fr'));
+  /// Ouvrir un autre voyage : son cache s'affiche, la synchronisation suit.
+  async function choisirVoyage(code) {
+    if (code === etat.codeVoyage) return;
+    etat.generation += 1;
+    etat.codeVoyage = code; local.ecrire(Cles.voyage, code);
+    etat.lundiChoisi = null; etat.filtre = '';
+    appliquer(cacheDe(code)); retablirIdentite();
+    etat.enCours = false; rendre();
+    await synchroniser();
+  }
+  /// Créer un voyage : j'en suis l'organisateur, j'y figure, et il s'ouvre.
+  async function creerVoyage(p) {
+    if (!etat.moi) { alerte('Choisissez d\'abord votre prénom.'); return false; }
+    const titre = String(p.titre || '').trim(); if (!titre) { alerte('Donnez un titre au voyage.'); return false; }
+    const debut = Fmt.composants(p.debut) ? p.debut : Fmt.aujourdhui();
+    let fin = Fmt.composants(p.fin) ? p.fin : debut; if (fin < debut) fin = debut;
+    const liste = participantsNettoyes(p.participants); if (!liste.includes(etat.moi.nom)) liste.unshift(etat.moi.nom);
+    const nouveau = { code: Voyage.nouveauCode(), titre, debut, nbJours: Math.max(1, Math.min(60, Fmt.ecartJours(debut, fin) + 1)), participants: liste, organisateur: etat.moi.nom, nomsDansOccupe: true, modifieLe: new Date() };
+    try { await magasin.enregistrerVoyage(nouveau); } catch (e) { alerte((e && e.message) || String(e)); return false; }
+    etat.voyages = etat.voyages.filter((v) => v.code !== nouveau.code).concat([nouveau]);
+    await choisirVoyage(nouveau.code);
+    toast(`Voyage « ${titre} » créé — vous en êtes l'organisateur`);
+    return true;
   }
 
   // ---------------------------------------------------------------- écritures
@@ -283,7 +333,7 @@
   async function supprimer(ev) {
     if (!peutSupprimer(ev)) { alerte("Vous n'avez pas le droit de modifier cet événement."); return; }
     etat.evenements = etat.evenements.filter((e) => e.id !== ev.id);
-    etat.ecrituresRecentes['retrait:' + ev.id] = Date.now();
+    etat.ecrituresRecentes[etat.codeVoyage + ':retrait:' + ev.id] = Date.now();
     memoriser(); rendre();
     try { await magasin.retirerEvenement(ev.id); }
     catch (e) {
@@ -295,7 +345,7 @@
   async function definirVille(date, ville) {
     const j = { date, ville };
     etat.jours = etat.jours.filter((x) => x.date !== date).concat([j]).sort((a, b) => (a.date < b.date ? -1 : 1));
-    etat.ecrituresRecentes['jour:' + date] = Date.now();
+    etat.ecrituresRecentes[etat.codeVoyage + ':jour:' + date] = Date.now();
     memoriser(); rendre();
     await ecrire({ genre: 'jour', jour: j }, true);
   }
@@ -434,7 +484,7 @@
     $('#identite-dedans').innerHTML = `<h2>Qui êtes-vous ?</h2><p class="intro">Votre prénom décide de ce que vous voyez en clair : vos événements, ceux où vous figurez, et ceux que vos collègues vous ont ouverts. Le reste apparaît en « 🔒 Occupé ».</p>
       <div class="panneau"><h3>Participants du voyage</h3>${etat.voyage.participants.map((n) => { const pris = !Regles.prenomLibre(etat.membres.find((m) => m.id === 'local:' + n), monCompte()); return `<button type="button" class="choix-identite${pris ? ' pris' : ''}" data-action="identite" data-nom="${h(n)}"><span class="nom">${h(n)}</span>${pris ? '<span class="etiquette discret">🔒 autre compte</span>' : ''}${n === etat.voyage.organisateur ? '<span class="etiquette neutre">Organisateur</span>' : ''}<span class="chev">›</span></button>`; }).join('')}</div>
       <p class="note" style="margin:0 0 10px">Un prénom appartient au premier compte Apple qui le choisit ; personne d'autre ne peut ensuite le prendre.</p>
-      <div class="panneau"><p class="note" style="margin:0">Votre prénom n'y est pas ? Seul l'organisateur ajoute un voyageur : demandez-le-lui.</p></div>${rappelRegle()}`;
+      <div class="panneau"><p class="note" style="margin:0">Votre prénom n'y est pas ? Seul l'organisateur ajoute un voyageur : demandez-le-lui.</p>${etat.codeVoyage !== Voyage.codeDOrigine ? '<button type="button" class="lien-bouton" data-action="voyage-origine">← Revenir au voyage d\'origine</button>' : ''}</div>${rappelRegle()}`;
   }
   const rappelRegle = () => `<div class="rappel"><span class="ico">✋</span><div><b>Ce qui n'entre pas ici</b><p>Aucun document interne, aucun nom de dossier. On ne publie que ce qu'on pourrait dire à voix haute sans porter atteinte au devoir de confidentialité lié à notre profession.</p></div></div>`;
   const bandeau = (texte, classe, ico) => `<div class="bandeau ${classe || ''}"><span class="ico">${ico || 'ℹ️'}</span><span>${texte}</span></div>`;
@@ -447,7 +497,7 @@
   function enTeteVoyage() {
     const v = etat.voyage, s = statistiques(); const fin = Voyage.fin(v);
     const compteur = (val, lib) => `<div class="compteur"><b>${h(val)}</b><span>${h(lib)}</span></div>`;
-    let html = `<section class="hero"><h2>${h(v.titre)}</h2><p>Voyage professionnel · départ ${Fmt.nomDuJour(v.debut)} ${Fmt.dateLongue(v.debut)} · retour ${Fmt.nomDuJour(fin)} ${Fmt.dateLongue(fin)}</p><div class="compteurs">${compteur(s.jours, 'jours')}${compteur(s.rendezVous, 'rendez-vous')}${compteur(s.evenements, 'événements')}${compteur(s.joursAvantDepart !== null ? 'J−' + s.joursAvantDepart : (s.enCours ? 'en cours' : '—'), s.joursAvantDepart !== null ? 'avant départ' : 'voyage')}</div>${etat.moi ? `<p class="qui">${estOrganisateur() ? '👑' : '👤'} ${h(etat.moi.nom)} · ${h(DESCRIPTION_PARTAGE)}</p>` : ''}</section>`;
+    let html = `<section class="hero"><h2>${h(v.titre)}</h2><p>Voyage professionnel · départ ${Fmt.nomDuJour(v.debut)} ${Fmt.dateLongue(v.debut)} · retour ${Fmt.nomDuJour(fin)} ${Fmt.dateLongue(fin)}</p><div class="compteurs">${compteur(s.jours, 'jours')}${compteur(s.rendezVous, 'rendez-vous')}${compteur(s.evenements, 'événements')}${compteur(s.joursAvantDepart !== null ? 'J−' + s.joursAvantDepart : (s.enCours ? 'en cours' : '—'), s.joursAvantDepart !== null ? 'avant départ' : 'voyage')}</div>${etat.moi ? `<p class="qui">${estOrganisateur() ? '👑' : '👤'} ${h(etat.moi.nom)} · ${h(DESCRIPTION_PARTAGE)}</p>` : ''}<button type="button" class="lien-hero" data-action="voyages">🧳 Mes voyages${voyagesVisibles().length > 1 ? ' (' + voyagesVisibles().length + ')' : ''} ›</button></section>`;
     if (DEMO) html += bandeau('Démonstration : des données fictives, rien ne part sur iCloud.', 'jade', '🧪');
     html += bandeauBoite();
     html += bandeau('🕐 ' + h(rappelFuseaux()), 'cyan', '🌏');
@@ -653,7 +703,7 @@
     html += `<div class="panneau"><h3>Aide</h3><div class="ligne"><button type="button" class="lien-bouton" data-action="notice">📖 Mode d'emploi</button></div><div class="ligne"><button type="button" class="lien-bouton" data-action="conditions">✋ Conditions d'utilisation</button></div>${estOrganisateur() ? '<div class="ligne"><button type="button" class="lien-bouton" data-action="signalements">💬 Signalements reçus</button></div>' : ''}</div>`;
     const m = Array.from(masques()).sort();
     if (m.length) html += `<div class="panneau"><h3>Personnes masquées</h3>${m.map((n) => `<div class="ligne"><span class="lib">${h(n)}</span><button type="button" class="lien-bouton" data-action="demasquer" data-nom="${h(n)}">Afficher à nouveau</button></div>`).join('')}<p class="note">Leurs événements n'apparaissent pas dans ce navigateur. Rien n'est effacé.</p></div>`;
-    html += `<div class="panneau"><h3>Voyage</h3><button type="button" class="bouton sobre" data-action="parametres"${estOrganisateur() ? '' : ' disabled'}>Paramètres du voyage…</button><p class="note">Titre, dates, participants, villes. Réservé à l'organisateur. Renommer un prénom ou réinitialiser le voyage se fait dans l'app iPhone.</p></div>`;
+    html += `<div class="panneau"><h3>Voyage</h3><div class="ligne" style="border:0;padding-top:0"><span class="lib">Voyage ouvert</span><span class="sec">${h(etat.voyage.titre)}</span></div><button type="button" class="bouton sobre" data-action="voyages">Mes voyages…</button><div style="height:8px"></div><button type="button" class="bouton sobre" data-action="parametres"${estOrganisateur() ? '' : ' disabled'}>Paramètres du voyage…</button><p class="note">« Mes voyages » : ouvrir un autre voyage ou en créer un. Les paramètres (titre, dates, participants, villes) sont réservés à l'organisateur du voyage ouvert. Renommer un prénom ou réinitialiser le voyage se fait dans l'app iPhone.</p></div>`;
     html += `<div class="panneau"><h3>Compte</h3><div class="ligne"><span class="lib">${DEMO ? 'Démonstration' : 'Identifiant Apple'}</span><span class="sec">${DEMO ? 'données fictives' : 'connecté'}</span></div><div id="place-deconnexion" class="apple-boutons"></div><p class="note">La déconnexion ne retire rien de l'agenda : elle ferme simplement la page à ce navigateur.</p></div>`;
     html += `<div class="panneau"><h3>Données</h3><div class="ligne"><span class="lib">Dernière synchronisation</span><span class="sec">${etat.synchroniseLe ? h(Fmt.age(etat.synchroniseLe)) : 'jamais'}</span></div><div class="ligne"><span class="lib">En attente d'envoi</span><span class="sec">${b.enAttente}${b.bloques ? ` · ${b.bloques} bloquée${b.bloques > 1 ? 's' : ''}` : ''}</span></div>${b.bloques ? `<div class="ligne"><button type="button" class="lien-bouton" data-action="reessayer-envois">Réessayer les envois</button><button type="button" class="lien-bouton danger" data-action="oublier-envois">Abandonner les envois bloqués</button></div>` : ''}<div class="ligne"><button type="button" class="lien-bouton" data-action="synchroniser">↻ Synchroniser maintenant</button></div><p class="note">L'agenda affiché est gardé dans ce navigateur pour s'ouvrir sans réseau ; ce qui n'a pas pu partir attend dans une boîte d'envoi.</p></div>`;
     html += `<div class="panneau"><h3>À propos</h3><div class="ligne"><span class="lib">Version</span><span class="sec">${h(VERSION)}</span></div><p class="note">Termin reprend l'agenda partagé du voyage : mêmes types d'événements, mêmes règles, même cloisonnement que l'app iPhone. L'agenda est partagé par iCloud entre les voyageurs ; aucun suivi.</p>${rappelRegle()}</div>`;
@@ -807,10 +857,36 @@
     ['Villes et heures', "Chaque jour porte une ville ; les heures sont celles du lieu. Pour un vol, précisez le fuseau de chaque horaire et le jour d'arrivée : la durée et l'heure de Luxembourg se calculent tout seuls. Les nuits d'hôtel et les arrivées se déduisent des événements."],
     ['Sans réseau', "L'agenda affiché reste disponible dans le navigateur. Ce qui n'a pas pu partir attend dans une boîte d'envoi (bandeau « en attente ») et part à la synchronisation suivante."],
     ["Sur le téléphone", "Android : dans Chrome, menu ⋮ puis « Ajouter à l'écran d'accueil » — Termin s'ouvre ensuite comme une app. iPhone : l'app Termin fait la même chose, mieux ; la page web sert surtout aux autres téléphones."],
+    ['Plusieurs voyages', "« Mes voyages » (en-tête de l'agenda ou Réglages) liste les voyages où vous figurez et permet d'en ouvrir un autre, ou d'en créer un nouveau dont vous serez l'organisateur. Votre prénom est le même partout ; chaque voyage a ses participants, ses villes et ses événements."],
     ['Signaler, masquer', "Sur l'événement d'un collègue (bouton ⋯ de sa carte, ou menu de la fiche) : « Signaler » prévient l'organisateur, « Masquer » retire de votre écran les saisies de cette personne — réversible dans Réglages."],
   ];
   function ouvrirNotice() { ouvrirFeuille({ titre: "Mode d'emploi", droite: { libelle: 'Fermer', action: fermerFeuille }, corps: `<h2 style="font-size:22px;margin:14px 0">Termin en dix points</h2><ol class="points" style="padding-left:20px">${POINTS.map(([t, x]) => `<li><b>${h(t)}</b><p>${h(x)}</p></li>`).join('')}</ol>${rappelRegle()}` }); }
   function ouvrirConditions() { const date = local.lire(Cles.conditions, null); ouvrirFeuille({ titre: 'Conditions', droite: { libelle: 'Fermer', action: fermerFeuille }, corps: `<div style="padding:10px 0">${texteConditions()}${date ? `<p class="mini">Acceptées le ${h(Fmt.dateHeure(new Date(date)))}</p>` : ''}</div>` }); }
+
+  function ouvrirVoyages() {
+    const liste = voyagesVisibles();
+    const corps = `<div class="panneau"><h3>Mes voyages</h3>${liste.map((v) => `<button type="button" class="choix-identite" data-action="voyage-ouvrir" data-code="${h(v.code)}"><span class="nom">${v.code === etat.codeVoyage ? '✓ ' : ''}<b>${h(v.titre)}</b><small style="display:block;color:var(--secondaire)">${h(Fmt.dateMini(v.debut))} → ${h(Fmt.dateMini(Voyage.fin(v)))} · ${h(Fmt.pluriel(v.participants.length, 'voyageur'))}${v.organisateur ? ' · organisé par ' + h(v.organisateur) : ''}</small></span><span class="chev">›</span></button>`).join('')}<p class="note">Un voyage n'apparaît qu'à ses participants. Celui qui est ouvert est coché. Votre prénom reste le même partout.</p></div><div class="panneau"><button type="button" class="bouton sobre" data-action="voyage-nouveau"${etat.moi ? '' : ' disabled'}>＋ Nouveau voyage…</button><p class="note">Vous en serez l'organisateur : titre, dates, participants, puis tout le reste comme ici.</p></div>`;
+    ouvrirFeuille({ id: 'voyages', titre: 'Voyages', droite: { libelle: 'Fermer', action: fermerFeuille }, corps });
+  }
+  let nouveauVoyage = null;
+  function ouvrirNouveauVoyage() {
+    nouveauVoyage = { titre: '', debut: Fmt.aujourdhui(), fin: Fmt.aujourdhui(), choisis: [] };
+    ouvrirFeuille({ id: 'nouveau-voyage', titre: 'Nouveau voyage', bloquee: true, gauche: { libelle: 'Annuler', action: fermerFeuille }, droite: { libelle: 'Créer', action: creerDepuisFormulaire }, corps: corpsNouveauVoyage() });
+  }
+  function rafraichirNouveauVoyage() { const f = $('#feuille-nouveau-voyage .defile'); if (f && nouveauVoyage) f.innerHTML = corpsNouveauVoyage(); }
+  function corpsNouveauVoyage() {
+    const n = nouveauVoyage, moi = etat.moi ? etat.moi.nom : null;
+    const candidats = participantsNettoyes(prenomsConnus().concat(n.choisis));
+    return `<div class="panneau"><h3>Voyage</h3><div class="ligne"><label for="nv-titre">Titre</label><input id="nv-titre" type="text" data-nv="titre" value="${h(n.titre)}" placeholder="Séminaire Paris, Salon Genève…"></div><div class="ligne"><label for="nv-debut">Date de départ</label><input id="nv-debut" type="date" data-nv="debut" value="${h(n.debut)}"></div><div class="ligne"><label for="nv-fin">Date de retour</label><input id="nv-fin" type="date" data-nv="fin" value="${h(n.fin)}"></div><div class="ligne"><span class="lib">Durée</span><span class="sec" id="nv-duree">${h(Fmt.pluriel(Math.max(1, Fmt.ecartJours(n.debut, n.fin) + 1), 'jour'))}</span></div></div>
+      <div class="panneau"><h3>Participants</h3><div class="pilules">${candidats.map((p) => { const actif = p === moi || n.choisis.includes(p); return `<button type="button" class="pilule${actif ? ' active' : ''}" data-action="nv-participant" data-nom="${h(p)}">${actif ? '✓ ' : ''}${h(p)}</button>`; }).join('')}</div><div class="ligne"><input type="text" id="nv-nouveau" placeholder="Un autre prénom" autocomplete="off" style="text-align:left"><button type="button" class="lien-bouton" data-action="nv-ajouter">Ajouter</button></div><p class="note">Vous y figurez d'office, comme organisateur. Un prénom nouveau devient celui du premier compte Apple qui le choisira.</p></div>`;
+  }
+  async function creerDepuisFormulaire(fond) {
+    if (!nouveauVoyage) return; const n = nouveauVoyage; const t = $('#nv-titre', fond); if (t) n.titre = t.value;
+    if (!n.titre.trim()) { alerte('Donnez un titre au voyage.'); return; }
+    $('.droite', fond).disabled = true;
+    const ok = await creerVoyage({ titre: n.titre, debut: n.debut, fin: n.fin, participants: n.choisis });
+    if (ok) { fermerFeuille(fond); fermerFeuille(); } else { const d = $('.droite', fond); if (d) d.disabled = false; }
+  }
 
   let parametres = null;
   function ouvrirParametres() {
@@ -828,6 +904,10 @@
     html += `<div class="panneau"><div class="ligne"><label for="p-noms">Prénoms des collègues dans « Occupé »</label><input type="checkbox" id="p-noms" data-param="nomsDansOccupe"${p.nomsDansOccupe ? ' checked' : ''}></div><p class="note">Désactivé, une carte masquée ne montre plus que l'heure. Le nom d'un externe n'apparaît jamais sur une carte masquée.</p></div>`;
     html += `<div class="panneau"><h3>Ville de chaque jour</h3>${datesDuVoyage().map((d) => `<div class="ligne"><span class="lib">${h(Fmt.dateMini(d))}</span>${villeMenu(d)}</div>`).join('')}<p class="note">Les villes s'enregistrent immédiatement.</p></div>`;
     return html;
+  }
+  function saisieNouveauVoyage(el) {
+    if (!nouveauVoyage) return; nouveauVoyage[el.dataset.nv] = el.value;
+    const d = $('#nv-duree'); if (d) d.textContent = Fmt.pluriel(Math.max(1, Fmt.ecartJours(nouveauVoyage.debut, nouveauVoyage.fin) + 1), 'jour');
   }
   function saisieParametres(el) {
     if (!parametres) return; const p = parametres; const k = el.dataset.param;
@@ -881,6 +961,12 @@
     // signalement, paramètres
     's-motif'(el) { if (!signalement) return; signalement.motif = el.dataset.motif; const t = $('#s-precision'); if (t) signalement.precision = t.value; const f = $('#feuille-signalement .defile'); if (f) f.innerHTML = corpsSignalement(); },
     's-clore'(el) { magasin.retirerSignalement(el.dataset.id).then(() => { fermerFeuille(); ouvrirSignalements(); }, (e) => alerte((e && e.message) || String(e))); },
+    voyages() { ouvrirVoyages(); },
+    'voyage-ouvrir'(el) { const code = el.dataset.code; fermerFeuille(); choisirVoyage(code); },
+    'voyage-origine'() { choisirVoyage(Voyage.codeDOrigine); },
+    'voyage-nouveau'() { ouvrirNouveauVoyage(); },
+    'nv-participant'(el) { if (!nouveauVoyage) return; const n = el.dataset.nom; if (etat.moi && n === etat.moi.nom) return; const i = nouveauVoyage.choisis.indexOf(n); if (i >= 0) nouveauVoyage.choisis.splice(i, 1); else nouveauVoyage.choisis.push(n); const t = $('#nv-titre'); if (t) nouveauVoyage.titre = t.value; rafraichirNouveauVoyage(); },
+    'nv-ajouter'() { if (!nouveauVoyage) return; const i = $('#nv-nouveau'); const v = i ? i.value.trim() : ''; if (!v) return; if (!nouveauVoyage.choisis.includes(v)) nouveauVoyage.choisis.push(v); const t = $('#nv-titre'); if (t) nouveauVoyage.titre = t.value; rafraichirNouveauVoyage(); const j = $('#nv-nouveau'); if (j) j.focus(); },
     'p-retirer'(el) { if (!parametres) return; parametres.participants = parametres.participants.filter((n) => n !== el.dataset.nom); rafraichirParametres(); },
     'p-ajouter'() { if (!parametres) return; const i = $('#p-nouveau'); const v = i ? i.value.trim() : ''; if (!v) return; if (!participantsNettoyes(parametres.participants).includes(v)) parametres.participants.push(v); rafraichirParametres(); const j = $('#p-nouveau'); if (j) j.focus(); },
   };
@@ -913,11 +999,13 @@
       if (el.dataset && el.dataset.change && CHANGEMENTS[el.dataset.change]) { CHANGEMENTS[el.dataset.change](el, e); return; }
       if (el.dataset && (el.dataset.champ !== undefined || el.dataset.x !== undefined || el.dataset.perso !== undefined || el.dataset.presence !== undefined)) saisieFormulaire(el);
       if (el.dataset && el.dataset.param !== undefined) saisieParametres(el);
+      if (el.dataset && el.dataset.nv !== undefined) saisieNouveauVoyage(el);
     });
     document.addEventListener('input', (e) => {
       const el = e.target; if (!el.dataset) return;
       if (el.dataset.champ !== undefined || el.dataset.x !== undefined || el.dataset.perso !== undefined || el.dataset.presence !== undefined) saisieFormulaire(el);
       if (el.dataset.param !== undefined) saisieParametres(el);
+      if (el.dataset.nv !== undefined) saisieNouveauVoyage(el);
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && feuilles.length) fermerFeuille(); });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && etat.connecte && (!etat.synchroniseLe || Date.now() - etat.synchroniseLe > 60000)) synchroniser(); });
@@ -926,7 +1014,7 @@
   // ---------------------------------------------------------------- démarrage
   async function init() {
     appliquerApparence();
-    const cache = revivre(local.lire(Cles.cache, null)); if (cache) appliquer(cache);
+    const cache = revivre(local.lire(cleVoyage(Cles.cache, etat.codeVoyage), null)); if (cache) appliquer(cache);
     retablirIdentite();
     brancherEvenements();
     rendre();

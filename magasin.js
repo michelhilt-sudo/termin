@@ -50,9 +50,17 @@
         environment: environnement || 'production' }] });
       this.conteneur = CloudKit.getDefaultContainer();
       this.base = this.conteneur.publicCloudDatabase;
-      this.codeVoyage = 'voyage';
+      this.codeVoyage = T.Voyage.codeDOrigine;
     }
     get nom() { return 'iCloud'; }
+    /// Le voyage ouvert. Chaque méthode CAPTURE le code à son entrée : un
+    /// changement de voyage pendant un appel ne fait pas glisser une écriture.
+    async choisirVoyage(code) { this.codeVoyage = code; }
+    async listerVoyages() {
+      try { return (await this.tous({ recordType: 'Voyage', filterBy: [{ fieldName: 'code', comparator: 'NOT_EQUALS', fieldValue: { value: '' } }] }))
+        .map((r) => this.voyageDepuis(r)).filter(Boolean).sort((a, b) => (a.debut < b.debut ? 1 : -1)); }
+      catch (e) { if (this.schemaAbsent(e)) return []; throw traduire(e); }
+    }
     async identite() {
       const u = await this.conteneur.setUpAuth();
       this.utilisateur = u ? u.userRecordName : null;
@@ -75,21 +83,21 @@
     }
     egal(champNom, v) { return { fieldName: champNom, comparator: 'EQUALS', fieldValue: { value: v } }; }
     async chargerInstantane() {
-      const voyage = await this.lireVoyage();
-      this.codeVoyage = voyage.code;
-      const [jours, evenements, membres] = await Promise.all([this.lireJours(voyage.code), this.lireEvenements(voyage.code), this.lireMembres()]);
+      const code = this.codeVoyage;
+      const voyage = await this.lireVoyage(code);
+      const [jours, evenements, membres] = await Promise.all([this.lireJours(code), this.lireEvenements(code), this.lireMembres()]);
       return { voyage, jours: T.Instantane.joursComplets(voyage, jours), evenements: T.Instantane.tri(evenements), membres, synchroniseLe: new Date() };
     }
-    async lireVoyage() {
+    async lireVoyage(code) {
       try {
-        const trouves = (await this.tous({ recordType: 'Voyage', filterBy: [this.egal('code', this.codeVoyage)] })).map((r) => this.voyageDepuis(r)).filter(Boolean);
-        if (!trouves.length) return T.Voyage.parDefaut();
+        const trouves = (await this.tous({ recordType: 'Voyage', filterBy: [this.egal('code', code)] })).map((r) => this.voyageDepuis(r)).filter(Boolean);
+        if (!trouves.length) return T.Voyage.vide(code);
         return trouves.reduce((a, b) => (+b.modifieLe > +a.modifieLe ? b : a));
-      } catch (e) { if (this.schemaAbsent(e)) return T.Voyage.parDefaut(); throw traduire(e); }
+      } catch (e) { if (this.schemaAbsent(e)) return T.Voyage.vide(code); throw traduire(e); }
     }
     voyageDepuis(r) {
       const code = texte(r, 'code'); if (!code) return null;
-      return T.Voyage.normaliser({ code, titre: texte(r, 'titre'), debut: texte(r, 'debut'), nbJours: nombre(r, 'nbJours', 12),
+      return T.Voyage.normaliser({ code, titre: texte(r, 'titre') || 'Voyage', debut: texte(r, 'debut'), nbJours: nombre(r, 'nbJours', 12),
         participants: depuisJSON(texte(r, 'participants', '[]'), []), organisateur: texte(r, 'organisateur') || null,
         nomsDansOccupe: nombre(r, 'nomsDansOccupe', 1) === 1, modifieLe: dateDe(r, 'modifieLe') || new Date(0) });
     }
@@ -155,15 +163,16 @@
       const r = verifier(await this.base.saveRecords([record]));
       return r.records[0];
     }
-    remplir(ev) {
-      return { identifiant: ev.id, voyageCode: this.codeVoyage, date: ev.date, debut: ev.debut || '', fin: ev.fin || '', type: ev.type, titre: ev.titre || '',
+    remplir(ev, code) {
+      return { identifiant: ev.id, voyageCode: code, date: ev.date, debut: ev.debut || '', fin: ev.fin || '', type: ev.type, titre: ev.titre || '',
         champs: json(ev.champs || {}), champsPersonnels: json(ev.champsPersonnels || {}), notes: ev.notes || '', participants: json(ev.participants || []),
         lecteurs: json(ev.lecteurs || []), presence: json(ev.presence || {}), autre: ev.autre ? 1 : 0, autreNom: ev.autreNom || '', auteur: ev.auteur || '',
         editeur: ev.editeur || '', discret: ev.discret ? 1 : 0, version: ev.version || 1, retiree: ev.retiree ? 1 : 0,
         creeLe: ev.creeLe instanceof Date ? ev.creeLe : new Date(ev.creeLe || Date.now()), modifieLe: ev.modifieLe ? new Date(ev.modifieLe) : new Date() };
     }
     async enregistrerEvenement(ev) {
-      const nom = `ev-${this.codeVoyage}-${ev.id}`;
+      const code = this.codeVoyage;
+      const nom = `ev-${code}-${ev.id}`;
       const existant = await this.relire(nom);
       if (existant) {
         const enPlace = this.evenementDepuis(existant);
@@ -172,22 +181,25 @@
         // dépassée est refusée, l'agenda est rechargé.
         if (!(ev.version > enPlace.version)) throw new ErreurPartage('modifieEntreTemps', `Modifié entre-temps par ${enPlace.editeur || enPlace.auteur || 'un collègue'}. L'agenda a été rechargé : reprenez votre modification.`);
       }
-      const r = await this.deposer('Evenement', nom, this.remplir(ev), existant);
+      const r = await this.deposer('Evenement', nom, this.remplir(ev, code), existant);
       return this.evenementDepuis(r) || ev;
     }
     async retirerEvenement(id) {
-      const nom = `ev-${this.codeVoyage}-${id}`;
+      const code = this.codeVoyage;
+      const nom = `ev-${code}-${id}`;
       const existant = await this.relire(nom); if (!existant) throw new ErreurPartage('introuvable', 'Cet événement a été supprimé entre-temps.');
       const ev = this.evenementDepuis(existant);
       ev.retiree = true; ev.modifieLe = new Date(); ev.version += 1;
-      await this.deposer('Evenement', nom, this.remplir(ev), existant);
+      await this.deposer('Evenement', nom, this.remplir(ev, code), existant);
     }
     async enregistrerJour(jour) {
-      const nom = `jour-${this.codeVoyage}-${jour.date}`;
-      await this.deposer('Jour', nom, { voyageCode: this.codeVoyage, date: jour.date, ville: jour.ville || '', modifieLe: new Date() }, await this.relire(nom));
+      const code = this.codeVoyage;
+      const nom = `jour-${code}-${jour.date}`;
+      await this.deposer('Jour', nom, { voyageCode: code, date: jour.date, ville: jour.ville || '', modifieLe: new Date() }, await this.relire(nom));
     }
+    /// Le dossier d'un voyage s'écrit sous SON code, sans changer le voyage
+    /// ouvert : c'est ainsi qu'un voyage neuf naît.
     async enregistrerVoyage(v) {
-      this.codeVoyage = v.code;
       const nom = `voyage-${v.code}`;
       await this.deposer('Voyage', nom, { code: v.code, titre: v.titre, debut: v.debut, nbJours: v.nbJours, participants: json(v.participants), organisateur: v.organisateur || '', nomsDansOccupe: v.nomsDansOccupe ? 1 : 0, modifieLe: v.modifieLe ? new Date(v.modifieLe) : new Date() }, await this.relire(nom));
     }
@@ -196,11 +208,13 @@
       await this.deposer('Membre', nom, { identifiant: m.id, nom: m.nom, role: m.role || 'voyageur', inscritLe: m.inscritLe ? new Date(m.inscritLe) : new Date() }, await this.relire(nom));
     }
     async signaler(s) {
+      const code = this.codeVoyage;
       const nom = `signalement-${cle(s.id)}`;
-      await this.deposer('Signalement', nom, { identifiant: s.id, voyageCode: this.codeVoyage, evenementId: s.evenementId, resume: s.resume, motif: s.motif, precision: s.precision || '', signaleParNom: s.signaleParNom, creeLe: s.creeLe ? new Date(s.creeLe) : new Date() }, await this.relire(nom));
+      await this.deposer('Signalement', nom, { identifiant: s.id, voyageCode: code, evenementId: s.evenementId, resume: s.resume, motif: s.motif, precision: s.precision || '', signaleParNom: s.signaleParNom, creeLe: s.creeLe ? new Date(s.creeLe) : new Date() }, await this.relire(nom));
     }
     async chargerSignalements() {
-      try { return (await this.tous({ recordType: 'Signalement', filterBy: [this.egal('voyageCode', this.codeVoyage)] }))
+      const code = this.codeVoyage;
+      try { return (await this.tous({ recordType: 'Signalement', filterBy: [this.egal('voyageCode', code)] }))
         .map((r) => ({ id: texte(r, 'identifiant'), evenementId: texte(r, 'evenementId'), resume: texte(r, 'resume'), motif: texte(r, 'motif', 'autre'), precision: texte(r, 'precision') || null, signaleParNom: texte(r, 'signaleParNom', '?'), creeLe: dateDe(r, 'creeLe') || new Date() }))
         .filter((s) => s.id).sort((a, b) => b.creeLe - a.creeLe); }
       catch (e) { if (this.schemaAbsent(e)) return []; throw traduire(e); }

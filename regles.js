@@ -359,9 +359,19 @@ const Voyage = {
     const base = Voyage.parDefaut(); const r = Object.assign(base, v || {});
     if (!Fmt.composants(r.debut)) r.debut = '2026-11-15';
     r.nbJours = Math.max(1, Math.min(NB_JOURS_MAX, Number(r.nbJours) || base.nbJours));
-    r.participants = participantsNettoyes(r.participants); if (!r.participants.length) r.participants = Voyage.parDefaut().participants;
+    r.participants = participantsNettoyes(r.participants);
+    // Un voyage sans participant n'existe pas pour l'origine (vieux dossier) ;
+    // un autre voyage peut l'être le temps d'un espace réservé.
+    if (!r.participants.length && r.code === 'voyage') r.participants = Voyage.parDefaut().participants;
     return r;
   },
+  // Plusieurs voyages dans le même partage (07/10/2026) : « voyage » est
+  // le code d'origine ; un code neuf est court et sûr dans un nom d'enregistrement.
+  codeDOrigine: 'voyage',
+  nouveauCode() { const a = 'abcdefghijkmnpqrstuvwxyz23456789'; let s = 'v'; for (let i = 0; i < 8; i++) s += a[Math.floor(Math.random() * a.length)]; return s; },
+  /// L'espace réservé d'un voyage qu'on ne connaît pas encore : daté de
+  /// l'origine des temps pour que le dossier venu du partage l'emporte.
+  vide(code) { return code === 'voyage' ? Voyage.parDefaut() : { code, titre: 'Voyage', debut: Fmt.aujourdhui(), nbJours: 1, participants: [], organisateur: null, nomsDansOccupe: true, modifieLe: new Date(0) }; },
   fin: (v) => Fmt.ajouterJours(v.debut, v.nbJours - 1),
   dates: (v) => Array.from({ length: v.nbJours }, (_, i) => Fmt.ajouterJours(v.debut, i)),
   contient: (v, date) => date >= v.debut && date <= Voyage.fin(v),

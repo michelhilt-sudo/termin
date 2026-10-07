@@ -8,12 +8,19 @@
   class MagasinLocal {
     constructor(instantane) {
       const i = instantane || { voyage: T.Voyage.parDefaut(), jours: [], evenements: [], membres: [] };
-      this.voyage = T.Voyage.normaliser(i.voyage); this.jours = (i.jours || []).slice();
-      this.evenements = (i.evenements || []).map((e) => Object.assign({}, e)); this.membres = (i.membres || []).slice(); this.signalements = [];
+      // Un instantané par voyage : l'origine, et ceux que la démonstration crée.
+      this.voyages = {}; this.code = T.Voyage.codeDOrigine;
+      this.voyages[this.code] = { voyage: T.Voyage.normaliser(i.voyage), jours: (i.jours || []).slice(), evenements: (i.evenements || []).map((e) => Object.assign({}, e)), signalements: [] };
+      this.membres = (i.membres || []).slice();
     }
     get nom() { return 'démo'; }
+    get courant() { if (!this.voyages[this.code]) this.voyages[this.code] = { voyage: T.Voyage.vide(this.code), jours: [], evenements: [], signalements: [] }; return this.voyages[this.code]; }
+    get voyage() { return this.courant.voyage; } get jours() { return this.courant.jours; } set jours(v) { this.courant.jours = v; }
+    get evenements() { return this.courant.evenements; } get signalements() { return this.courant.signalements; } set signalements(v) { this.courant.signalements = v; }
     async identite() { return { identifiant: 'demo', connecte: true }; }
     surConnexion() {} surDeconnexion() {}
+    async choisirVoyage(code) { this.code = code; }
+    async listerVoyages() { return Object.values(this.voyages).map((x) => Object.assign({}, x.voyage)).sort((a, b) => (a.debut < b.debut ? 1 : -1)); }
     async chargerInstantane() {
       return { voyage: Object.assign({}, this.voyage), jours: T.Instantane.joursComplets(this.voyage, this.jours), evenements: T.Instantane.tri(this.evenements.map((e) => Object.assign({}, e))), membres: this.membres.slice(), synchroniseLe: new Date() };
     }
@@ -25,7 +32,11 @@
     }
     async retirerEvenement(id) { const e = this.evenements.find((x) => x.id === id); if (!e) throw new ErreurLocale('introuvable', 'Cet événement a été supprimé entre-temps.'); e.retiree = true; e.version += 1; e.modifieLe = new Date(); }
     async enregistrerJour(j) { this.jours = this.jours.filter((x) => x.date !== j.date).concat([Object.assign({}, j)]); }
-    async enregistrerVoyage(v) { this.voyage = T.Voyage.normaliser(Object.assign({}, v)); }
+    async enregistrerVoyage(v) {
+      const propre = T.Voyage.normaliser(Object.assign({}, v));
+      if (!this.voyages[propre.code]) this.voyages[propre.code] = { voyage: propre, jours: [], evenements: [], signalements: [] };
+      else this.voyages[propre.code].voyage = propre;
+    }
     async lireMembre(id) { const m = this.membres.find((x) => x.id === id); return m ? Object.assign({}, m) : null; }
     async retirerMembre(id) { this.membres = this.membres.filter((x) => x.id !== id); }
     async enregistrerMembre(m) { this.membres = this.membres.filter((x) => x.id !== m.id).concat([Object.assign({}, m)]); }
