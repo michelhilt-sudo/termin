@@ -18,7 +18,7 @@
   const cleVoyage = (base, code) => (code === Voyage.codeDOrigine ? base : base + '.' + code);
   const DELAI_INDEXATION = 600000;
   const DESCRIPTION_PARTAGE = 'Chaque événement est en clair pour ses participants et ses lecteurs ; les autres ne voient que « 🔒 Occupé ».';
-  const VERSION = 'web 1.3.1 (08/10/2026)';
+  const VERSION = 'web 1.3.2 (08/10/2026)';
   const SUGGESTIONS_VILLES = ['Luxembourg', 'Paris', 'Hong Kong', 'Shanghai'];
   const MOTIFS = [
     ['confidentialite', 'Atteinte à la confidentialité', 'Un détail de dossier, un montant, un document interne…'],
@@ -860,7 +860,7 @@
     ["L'agenda et la semaine", "L'onglet Agenda déroule les jours du voyage ; touchez un jour dans la grille du haut pour y aller. L'onglet Semaine donne la vue d'ensemble. Le menu 👁 en haut filtre l'agenda sur une personne. Le bouton ↻ synchronise."],
     ['Ajouter un événement', "Le ＋ en haut à droite, ou « Ajouter un événement » sous un jour. Choisissez le type (vol, transport, hébergement, rendez-vous, repas…), le jour, les heures, les participants. Les champs de la section « Pour moi seul » (ma place, ma chambre, ma note) ne sont visibles que de vous ; le reste est commun."],
     ["L'adresse et le plan", "Dans « Adresse », écrivez l'adresse ou collez un lien Plans / Google Maps (dans Google Maps : bouton Partager, pas « Copier l'adresse »). Les boutons juste en dessous ouvrent la carte ; le bouton ⋯ d'une carte de l'agenda les propose aussi."],
-    ['Qui voit quoi', "Un événement se lit en clair par son auteur, ses participants, ses lecteurs et l'organisateur. Pour les autres, il apparaît en « Occupé » — l'heure, pas le contenu. Les participants peuvent le modifier, les lecteurs seulement le lire ; seul l'auteur (ou l'organisateur) le supprime. Les lecteurs se choisissent dans le formulaire de l'événement."],
+    ['Qui voit quoi', "Un événement se lit en clair par son auteur, ses participants, ses lecteurs et l'organisateur. Pour les autres, il apparaît en « Occupé » — l'heure, pas le contenu. Les participants peuvent le modifier, les lecteurs seulement le lire ; seul l'auteur (ou l'organisateur) le supprime. Les lecteurs se choisissent dans le formulaire de l'événement. La barre et le fond de chaque carte disent votre place : vert participant, bleu lecteur, rouge ni l'un ni l'autre."],
     ['Villes et heures', "Chaque jour porte une ville ; les heures sont celles du lieu. Pour un vol, précisez le fuseau de chaque horaire et le jour d'arrivée : la durée et l'heure de Luxembourg se calculent tout seuls. Les nuits d'hôtel et les arrivées se déduisent des événements."],
     ['Sans réseau', "L'agenda affiché reste disponible dans le navigateur. Ce qui n'a pas pu partir attend dans une boîte d'envoi (bandeau « en attente ») et part à la synchronisation suivante."],
     ["Sur le téléphone", "Android : dans Chrome, menu ⋮ puis « Ajouter à l'écran d'accueil » — Termin s'ouvre ensuite comme une app. iPhone : l'app Termin fait la même chose, mieux ; la page web sert surtout aux autres téléphones."],
