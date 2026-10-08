@@ -4,7 +4,7 @@
   --encre: #0B1B3A; --secondaire: #5B6B85; --tertiaire: #8A98B3; --pale: #A9B7CC;
   --accent: #1D4ED8; --cyan: #0369A1; --jade: #0F6E8C; --danger: #C81E1E; --danger-doux: #FDE8E8;
   --marine: #0B2A6F; --royal: #1E5AE8; --accent-doux: #E8F0FB; --toast: #0B1B3A;
-  --vert: #15803D; --orange: #C2410C;
+  --vert: #15803D; --lecteur: #1D4ED8;
   --ombre: 0 6px 20px rgba(11, 27, 58, .10);
   color-scheme: light;
 }
@@ -13,7 +13,7 @@
     --fond: #0B1730; --surface: #142240; --surface2: #1B2D52; --ligne: #2B3F6B;
     --encre: #EAF0FA; --secondaire: #9FB0CC; --tertiaire: #7E8FB0; --pale: #5B6B85;
     --accent: #7CB3FF; --cyan: #7DD3FC; --jade: #67D6F0; --danger: #FF6B66; --danger-doux: #3A1A1A;
-    --accent-doux: #1B2D52; --toast: #2B3F6B; --ombre: 0 6px 20px rgba(0, 0, 0, .35); --vert: #4ADE80; --orange: #FB923C;
+    --accent-doux: #1B2D52; --toast: #2B3F6B; --ombre: 0 6px 20px rgba(0, 0, 0, .35); --vert: #4ADE80; --lecteur: #7CB3FF;
     color-scheme: dark;
   }
 }
@@ -21,7 +21,7 @@
   --fond: #0B1730; --surface: #142240; --surface2: #1B2D52; --ligne: #2B3F6B;
   --encre: #EAF0FA; --secondaire: #9FB0CC; --tertiaire: #7E8FB0; --pale: #5B6B85;
   --accent: #7CB3FF; --cyan: #7DD3FC; --jade: #67D6F0; --danger: #FF6B66; --danger-doux: #3A1A1A;
-  --accent-doux: #1B2D52; --toast: #2B3F6B; --ombre: 0 6px 20px rgba(0, 0, 0, .35); --vert: #4ADE80; --orange: #FB923C;
+  --accent-doux: #1B2D52; --toast: #2B3F6B; --ombre: 0 6px 20px rgba(0, 0, 0, .35); --vert: #4ADE80; --lecteur: #7CB3FF;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -196,17 +196,17 @@ select.outil { max-width: 150px; text-overflow: ellipsis; }
 .participants-param .ligne input[type="text"] { text-align: left; }
 .points li { margin-bottom: 12px; } .points b { display: block; } .points p { margin: 2px 0 0; font-size: 14px; color: var(--secondaire); }
 
-/* ---- ma place dans l'événement : participant (vert), lecteur (orange), ni l'un ni l'autre (rouge) */
-.carte.rel-participant::before { background: var(--vert); } .carte.rel-lecteur::before { background: var(--orange); } .carte.rel-aucun::before { background: var(--danger); }
+/* ---- ma place dans l'événement : participant (vert), lecteur (bleu — l'orange se confondait avec le rouge, Michel 08/10), ni l'un ni l'autre (rouge) */
+.carte.rel-participant::before { background: var(--vert); } .carte.rel-lecteur::before { background: var(--lecteur); } .carte.rel-aucun::before { background: var(--danger); }
 .carte.occupe::before, .carte.derivee::before { display: block; }
 /* un conflit ne change pas la barre : l'encadré ⚠️ suffit, la barre dit ma place */
 .rel { font-size: 11px; font-weight: 600; white-space: nowrap; }
-.rel-participant { color: var(--vert); } .rel-lecteur { color: var(--orange); } .rel-aucun { color: var(--danger); }
+.rel-participant { color: var(--vert); } .rel-lecteur { color: var(--lecteur); } .rel-aucun { color: var(--danger); }
 .legende { display: flex; gap: 14px; flex-wrap: wrap; padding: 2px 4px 6px; }
-.bloc.rel-participant { box-shadow: inset 3px 0 0 var(--vert); } .bloc.rel-lecteur { box-shadow: inset 3px 0 0 var(--orange); } .bloc.rel-aucun { box-shadow: inset 3px 0 0 var(--danger); }
+.bloc.rel-participant { box-shadow: inset 3px 0 0 var(--vert); } .bloc.rel-lecteur { box-shadow: inset 3px 0 0 var(--lecteur); } .bloc.rel-aucun { box-shadow: inset 3px 0 0 var(--danger); }
 /* le fond de la carte aussi, en teinte claire (Michel, 05/10/2026) */
 .carte.rel-participant { background: color-mix(in srgb, var(--vert) 11%, var(--surface2)); }
-.carte.rel-lecteur { background: color-mix(in srgb, var(--orange) 12%, var(--surface2)); }
+.carte.rel-lecteur { background: color-mix(in srgb, var(--lecteur) 12%, var(--surface2)); }
 .carte.rel-aucun, .carte.occupe.rel-aucun { background: color-mix(in srgb, var(--danger) 9%, var(--surface2)); }
 
 /* ---- plusieurs voyages */
