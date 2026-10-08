@@ -18,7 +18,7 @@
   const cleVoyage = (base, code) => (code === Voyage.codeDOrigine ? base : base + '.' + code);
   const DELAI_INDEXATION = 600000;
   const DESCRIPTION_PARTAGE = 'Chaque événement est en clair pour ses participants et ses lecteurs ; les autres ne voient que « 🔒 Occupé ».';
-  const VERSION = 'web 1.3 (07/10/2026)';
+  const VERSION = 'web 1.3.1 (08/10/2026)';
   const SUGGESTIONS_VILLES = ['Luxembourg', 'Paris', 'Hong Kong', 'Shanghai'];
   const MOTIFS = [
     ['confidentialite', 'Atteinte à la confidentialité', 'Un détail de dossier, un montant, un document interne…'],
@@ -222,7 +222,14 @@
       appliquer(fusion);
       retablirIdentite();
       controlerIdentite();
-      try { const liste = await magasin.listerVoyages(); if (gen === etat.generation) etat.voyages = liste; } catch (_) {}
+      try {
+        let liste = await magasin.listerVoyages();
+        // Un voyage créé avant la règle des dates tromperait les anciennes
+        // versions de l'app : on le réécrit tel quel, la date se corrige.
+        const aCorriger = liste.filter(Voyage.dateATromperLesAnciens);
+        if (aCorriger.length) { for (const v of aCorriger) { try { await magasin.enregistrerVoyage(v); } catch (_) {} } liste = await magasin.listerVoyages(); }
+        if (gen === etat.generation) etat.voyages = liste;
+      } catch (_) {}
     } catch (e) {
       if (!(e && e.code === 'horsLigne')) alerte((e && e.message) || String(e));
     } finally { if (gen === etat.generation) etat.enCours = false; rendre(); }

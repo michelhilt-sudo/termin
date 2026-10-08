@@ -34,6 +34,7 @@
     async enregistrerJour(j) { this.jours = this.jours.filter((x) => x.date !== j.date).concat([Object.assign({}, j)]); }
     async enregistrerVoyage(v) {
       const propre = T.Voyage.normaliser(Object.assign({}, v));
+      propre.modifieLe = propre.code === T.Voyage.codeDOrigine ? new Date() : T.Voyage.dateDesAutresVoyages;
       if (!this.voyages[propre.code]) this.voyages[propre.code] = { voyage: propre, jours: [], evenements: [], signalements: [] };
       else this.voyages[propre.code].voyage = propre;
     }

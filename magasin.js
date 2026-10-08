@@ -201,7 +201,9 @@
     /// ouvert : c'est ainsi qu'un voyage neuf naît.
     async enregistrerVoyage(v) {
       const nom = `voyage-${v.code}`;
-      await this.deposer('Voyage', nom, { code: v.code, titre: v.titre, debut: v.debut, nbJours: v.nbJours, participants: json(v.participants), organisateur: v.organisateur || '', nomsDansOccupe: v.nomsDansOccupe ? 1 : 0, modifieLe: v.modifieLe ? new Date(v.modifieLe) : new Date() }, await this.relire(nom));
+      // Seule l'origine porte une vraie date (voir `Voyage.dateDesAutresVoyages`).
+      const date = v.code === T.Voyage.codeDOrigine ? (v.modifieLe ? new Date(v.modifieLe) : new Date()) : T.Voyage.dateDesAutresVoyages;
+      await this.deposer('Voyage', nom, { code: v.code, titre: v.titre, debut: v.debut, nbJours: v.nbJours, participants: json(v.participants), organisateur: v.organisateur || '', nomsDansOccupe: v.nomsDansOccupe ? 1 : 0, modifieLe: date }, await this.relire(nom));
     }
     async enregistrerMembre(m) {
       const nom = `membre-${cle(m.id)}`;

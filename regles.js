@@ -368,6 +368,11 @@ const Voyage = {
   // Plusieurs voyages dans le même partage (07/10/2026) : « voyage » est
   // le code d'origine ; un code neuf est court et sûr dans un nom d'enregistrement.
   codeDOrigine: 'voyage',
+  // Les versions de l'app d'avant les voyages multiples (builds 1 à 4)
+  // ouvrent « le dossier modifié le plus récemment » : un autre voyage est
+  // daté d'une seconde après 1970 pour ne jamais leur être proposé (08/10/2026).
+  dateDesAutresVoyages: new Date(1000),
+  dateATromperLesAnciens: (v) => v.code !== 'voyage' && +v.modifieLe > 1000,
   nouveauCode() { const a = 'abcdefghijkmnpqrstuvwxyz23456789'; let s = 'v'; for (let i = 0; i < 8; i++) s += a[Math.floor(Math.random() * a.length)]; return s; },
   /// L'espace réservé d'un voyage qu'on ne connaît pas encore : daté de
   /// l'origine des temps pour que le dossier venu du partage l'emporte.

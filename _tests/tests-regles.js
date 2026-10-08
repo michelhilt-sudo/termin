@@ -75,4 +75,10 @@ check('créateur inconnu : libre', Regles.prenomLibre({ nom: 'Marc', creePar: nu
 check('ma fiche : libre', Regles.prenomLibre({ nom: 'Marc', creePar: '_moi' }, '_moi'));
 check("fiche d'un autre : prise", !Regles.prenomLibre({ nom: 'Marc', creePar: '_autre' }, '_moi'));
 check('sans compte (démo) : libre', Regles.prenomLibre({ nom: 'Marc', creePar: '_autre' }, null));
+// ---- plusieurs voyages (08/10/2026) : un autre voyage ne trompe pas les anciennes versions
+check('origine : vraie date, ne trompe pas', !T.Voyage.dateATromperLesAnciens({ code: 'voyage', modifieLe: new Date() }));
+check('autre voyage daté 1970+1 s : ne trompe pas', !T.Voyage.dateATromperLesAnciens({ code: 'vabc', modifieLe: T.Voyage.dateDesAutresVoyages }));
+check("autre voyage daté d'aujourd'hui : tromperait", T.Voyage.dateATromperLesAnciens({ code: 'vabc', modifieLe: new Date() }));
+check('un code neuf commence par v et fait 9 caractères', /^v[a-z0-9]{8}$/.test(T.Voyage.nouveauCode()));
+check("le voyage vide d'un autre code est daté de 1970", +T.Voyage.vide('vabc').modifieLe === 0);
 process.exit(bilan('règles Termin (web)') ? 0 : 1);
